@@ -173,11 +173,24 @@ def main():
 
     # ---------------- 4) hedef kaynağı ----------------
     hedef = HedefKaynagi()
-    udp = UdpDinleyici(hedef)
-    if udp.basla():
-        print("  HEDEF     : yarışma sunucusu yanıtı  ·  UDP :%d (deneme kipi)" % udp.port)
+    # ⛔⛔ YARIŞMADA UDP DİNLEYİCİSİ KAPALI — ENJEKSİYON RİSKİ.
+    #   `UdpDinleyici` 0.0.0.0:47800'ü dinler; ağdaki HERHANGİ bir makine
+    #   oraya hedef paketi yollayabilir ve SON GELEN PAKET KAZANIR.
+    #   Bu YAŞANDI (2026-08-30): ağdaki ikinci bir yayıncı yüzünden panel
+    #   gerçek hedef yerine başka bir konumu gösterdi.
+    #   ⛔ Yarışma alanında ORTAK BİR YEREL AĞA bağlanıyoruz (doküman §2);
+    #     orada başka bir takımın yayını hedefimizi kaydırabilir.
+    #   Bu yüzden UDP YALNIZ `--deneme` kipinde açılır; yarışmada hedef
+    #   YALNIZCA sunucu yanıtından gelir.
+    udp = None
+    if a.sunucu:
+        print("  HEDEF     : YALNIZ yarışma sunucusu yanıtı (UDP kapalı)")
     else:
-        print("  HEDEF     : ⛔ UDP açılamadı: %s" % udp.hata)
+        udp = UdpDinleyici(hedef)
+        if udp.basla():
+            print("  HEDEF     : DENEME — UDP :%d dinleniyor" % udp.port)
+        else:
+            print("  HEDEF     : ⛔ UDP açılamadı: %s" % udp.hata)
 
     # ---------------- 5) araç bağlantısı ----------------
     gb = GercekBaglanti(bag, komut_sureci=ks, hedef_kaynak=hedef)
@@ -391,7 +404,8 @@ def main():
         ks.dur()
         if sv:
             sv.dur()
-        udp.dur()
+        if udp is not None:
+            udp.dur()
         if kam:
             kam.kapat()
         gb.kapat()

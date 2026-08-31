@@ -24,11 +24,19 @@ yesil(){   printf '\033[32m%s\033[0m\n' "$*"; }
 # ==============================================================================
 # ⛔ Yarışma alanında ETHERNET KABLOSUYLA sunucunun yerel ağına bağlanılır
 #   (doküman §2). Adresi hakemler bildirir; aşağıdaki değeri ona göre değiştir.
-export DOW_SUNUCU="${DOW_SUNUCU:-http://127.0.0.1:5000}"
+# ⭐ SAHADA BİLDİRİLEN ADRES: 10.0.0.1 (yarışma yerel ağı, ethernet)
+#   ⚠ PORT hakemlerce bildirilmedi; 5000 varsayıldı. Sunucu testi 404/bağlantı
+#     hatası veriyorsa portu ONLARDAN SOR ve burayı düzelt.
+export DOW_SUNUCU="${DOW_SUNUCU:-http://10.0.0.1:5000}"
 export DOW_SUNUCU_KADI="${DOW_SUNUCU_KADI:-hamidiye}"
 export DOW_SUNUCU_SIFRE="${DOW_SUNUCU_SIFRE:-Z8vN1cR5tY}"
-# ⛔ TAKIM NUMARASI HAKEMLERDEN ALINIR (doküman §7.1). 0 ise paket geçersiz
-#   sayılabilir — sahada MUTLAKA doldur.
+# ⛔ TAKIM NUMARASI (doküman §7.1: "Hakemler tarafından tanımlanan takım
+#   numarası"). Hakemler bize bir numara BİLDİRMEDİ.
+#   ⚠ Sunucu paketi 204 (biçim yanlış) ya da 400 ile reddederse ilk
+#     şüpheli budur — hakemden numarayı SOR ve buraya yaz.
+#   ⚠ Bazı kurulumlarda numara oturum açan kullanıcıdan çıkarılır; o
+#     durumda 0 sorun olmaz. `araclar/sunucu_testi.py` bunu söyler:
+#     telemetri kabul ediliyorsa numara sorun değildir.
 export DOW_TAKIM_NO="${DOW_TAKIM_NO:-0}"
 # ⛔⛔ GÖNDERİM HIZI — DOKÜMANIN CEZALI KURALI (§7):
 #   "En az 1 Hz. **2 Hz ÜZERİ 400 + hata kodu 3** ile cevaplanır."

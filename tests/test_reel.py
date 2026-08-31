@@ -3577,3 +3577,42 @@ def test_R122_GNSS_SUZGECI_kapaliyken_BIT_BIT_ayni_acikken_SUZUYOR():
 
     _os.environ["DOW_GNSS_FILTRE"] = "0"
     importlib.reload(_gf)
+
+
+# ---------------------------------------------------------------- R123
+def test_R123_YARISMADA_UDP_hedef_dinleyicisi_KAPALI():
+    """⛔ Yarışmada hedef YALNIZCA sunucu yanıtından gelir.
+
+    `UdpDinleyici` 0.0.0.0:47800'ü dinler ve ağdaki HERHANGİ bir makine
+    oraya hedef paketi yollayabilir; son gelen paket kazanır.
+
+    ⛔ BU YAŞANDI (2026-08-30): ağdaki ikinci bir yayıncı yüzünden panel
+      gerçek hedef yerine başka bir konumu gösterdi. Yarışma alanında
+      ORTAK BİR YEREL AĞA bağlanıyoruz (doküman §2) — orada başka bir
+      takımın yayını hedefimizi kaydırabilir. Enjeksiyon riski gerçektir.
+
+    Kural: `--sunucu` verildiyse (yarışma kipi) UDP AÇILMAZ.
+    """
+    import re
+    y = open(os.path.join(REEL, "drone_yki.py"), encoding="utf-8").read()
+    kod = "\n".join(x.split("#")[0] for x in y.splitlines())
+
+    i_udp = kod.index("UdpDinleyici(hedef)")
+    # dinleyicinin kurulduğu satırdan geriye doğru bakınca, onu koruyan
+    # bir `if a.sunucu` / `else` dalı OLMALI
+    onceki = kod[max(0, i_udp - 400):i_udp]
+    assert "a.sunucu" in onceki, (
+        "UDP dinleyicisi KOŞULSUZ açılıyor — yarışma ağında hedef "
+        "enjeksiyonuna açık")
+
+    # `udp` yarışma kipinde None olmalı ve kapanış buna dayanmalı
+    assert "udp = None" in kod, "yarışma kipinde udp None yapılmıyor"
+    assert "if udp is not None:" in kod, (
+        "kapanışta None denetimi yok — yarışma kipinde çökerdi")
+
+    # başlatma betiği yarışma kipinde --sunucu geçiriyor mu
+    sh = open(os.path.join(REEL, "baslat.sh"), encoding="utf-8").read()
+    shk = "\n".join(x.split("#")[0] for x in sh.splitlines())
+    assert '--sunucu' in shk and '$DOW_SUNUCU' in shk, (
+        "baslat.sh yarışma kipinde --sunucu geçirmiyor")
+    assert "--deneme" in shk, "deneme kipi (UDP'li) kaldırılmış"
