@@ -321,6 +321,7 @@ küçüktür** → 200 → 400 → 800 diye yükselt.
 | Failsafe dikey iniş | tezgâhta: kanal 6/8 → 1899 µs, TUT→IN, sabit hız |
 | GNSS süzgeci | sentetik: ham 21.3 m → süzülmüş **7.8 m** |
 | Sunucu haberleşmesi | sahte sunucuya karşı uçtan uca ✔ |
+| **Uçan hedefe yönelme** | sahte sunucu + bozuk GPS + 200 m yarıçaplı daire: hedef 360° dönerken komut onu takip etti, **15/18 uyumlu (%83)** — uyumsuzların üçü de çubuk doyumundan (±45° kuantalama), ters çeyrek **hiç** görülmedi |
 
 > `Y_ISARET` sorusu aylarca *"kesin kanıtı ilk otonom uçuştur"* diye açık
 > durdu. **Yerde, pervanesiz, DISARM hâlde kapandı.**
@@ -341,6 +342,8 @@ küçüktür** → 200 → 400 → 800 diye yükselt.
 
 ```bash
 python3 araclar/sunucu_testi.py          # ⭐ sunucu: giriş, paket, hedef, hız
+python3 araclar/sahte_sunucu.py          # ⭐ yarışma provası: uçan+bozuk hedef
+python3 araclar/sahte_skydagger.py       # donanımsız sahte araç
 python3 gercek/hedef_testi.py            # hedef akışı (Hz, yaş, reddedilen)
 python3 gercek/kamera_ayari.py --tara    # yakalama kartını bul
 python3 gercek/tespit_izle.py            # dedektör güveni, canlı
