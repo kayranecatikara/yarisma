@@ -1,0 +1,806 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Avcı Drone — Yer Kontrol İstasyonu</title>
+<!--
+  ================================================================================
+  SADE ARAYÜZ (2026-08-25, kullanıcı isteği)
+  ================================================================================
+  "arayüzü sadeleştir, boş kullanılmayan butonların hepsini çıkart, köklü bir
+   değişiklik yap... görev başlat / hibrit / gps / görsel butonları olsun,
+   çok öyle başka bir şey olmasın"
+
+  ÇIKARILANLAR — hepsi BİZDE KARŞILIĞI OLMAYAN, ekranda "—" gösteren şeylerdi:
+    * "Görev Başlat (İnovasyonlu J)" / "Gerçek GPS (test)"  -> onların GNSS
+      filtre kıyas sistemi; bizde J filtresi yok
+    * "BOZUK GNSS GİRDİSİ" kartı (bozulma/paket yaşı/J düzeltme)  -> aynı sebep
+    * "Manuel Mod" (klavyeyle RC)  -> bizde yok
+    * "Tune (Canlı Ayar)" kaydırıcıları  -> panel tasarım kararı: ayarları
+      yapay zekâ değiştirir, uçuş sırasında slider yok
+    * "Kayıtlar / galeri", LOS grafiği, minimap, olay günlüğü, PnP poz kartı
+    * TAKİP düğmesi  -> ölçüldü ve KAPALI kaldı (kontrol döngüsünden %16
+      alıyor, kazanç gürültü içinde); env ile açılabilir
+
+  TAM SÜRÜM `dow/web/index_tam.html`'de duruyor (kıyas/geri dönüş için).
+
+  ⭐ KUTU FPV AKIŞINA SUNUCUDA ÇİZİLİYOR (dow/panel.py::kare_koy):
+     yeşil düz = gerçek tespit · turuncu kesik = takipçi öngörüsü.
+     Bu yüzden istemci tarafında ayrı overlay YOK — aynı kutuyu iki kez
+     çizmek hem gereksiz hem de kayma riski.
+  ================================================================================
+-->
+<style>
+  :root{
+    --bg:#0a0e14; --panel:#11161f; --panel2:#161c27; --border:#222c3a;
+    --text:#cdd6e4; --muted:#6b7891; --accent:#00e0a4; --accent2:#33a0ff;
+    --danger:#ff5d5d; --warn:#ffb454;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    font-family:"Segoe UI",system-ui,sans-serif;background:var(--bg);
+    color:var(--text);height:100vh;display:grid;
+    grid-template-rows:52px 64px 1fr;overflow:hidden;
+  }
+  .mono{font-family:Consolas,"Courier New",monospace}
+
+  /* --- üst şerit --- */
+  header{
+    display:flex;align-items:center;gap:14px;padding:0 18px;
+    background:var(--panel);border-bottom:1px solid var(--border);
+  }
+  header h1{font-size:15px;font-weight:600;letter-spacing:.4px}
+  header h1 span{color:var(--accent)}
+  .bag{margin-left:auto;display:flex;align-items:center;gap:7px;
+       font-size:12px;color:var(--muted)}
+  .nokta{width:9px;height:9px;border-radius:50%;background:var(--danger)}
+  .nokta.on{background:var(--accent);box-shadow:0 0 8px var(--accent)}
+
+  /* --- kilit bandı --- */
+  #kilitBar{
+    display:flex;align-items:center;gap:16px;padding:0 18px;
+    background:var(--panel2);border-bottom:1px solid var(--border);
+    transition:background .25s;
+  }
+  #kilitBar.on{background:#0d2a20;border-bottom-color:#1d6b52}
+  #kilitIkon{font-size:22px}
+  #kilitMetin{font-size:17px;font-weight:700;letter-spacing:.5px}
+  #kilitBar.on #kilitMetin{color:var(--accent)}
+  .pbar{flex:1;height:9px;background:#0a0e14;border-radius:5px;overflow:hidden;
+        border:1px solid var(--border);max-width:420px}
+  .pfill{height:100%;width:0;background:var(--accent);transition:width .2s}
+  .kSay{font-size:13px;color:var(--muted)}
+  .kSay b{color:var(--text);font-family:Consolas,monospace;font-size:15px}
+
+  /* --- gövde --- */
+  main{display:grid;grid-template-columns:220px 1fr 250px;min-height:0}
+  aside,.sag{background:var(--panel);padding:14px;overflow-y:auto}
+  aside{border-right:1px solid var(--border)}
+  .sag{border-left:1px solid var(--border)}
+  .baslik{font-size:10px;letter-spacing:1.4px;color:var(--muted);
+          text-transform:uppercase;margin-bottom:10px}
+
+  /* --- hedef (Talon) kontrol paneli: iki sanal joystick --- */
+  /* Avcı teal (--accent), HEDEF mavi (--accent2): renk hangi aracı sürdüğünü söyler. */
+  #talonBtn.acik{border-color:var(--accent2);background:#0f1a26;color:var(--accent2)}
+  .tpanel{background:var(--panel2);border:1px solid var(--accent2);border-radius:8px;
+    padding:10px;margin:-3px 0 9px}
+  .tkols{display:flex;gap:8px}
+  .tkol{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px}
+  .tpad{position:relative;width:100%;aspect-ratio:1/1;border-radius:50%;
+    background:radial-gradient(circle at 50% 50%,#0d141d 0%,#0a0f16 70%);
+    border:1px solid var(--border);touch-action:none;cursor:grab;overflow:hidden}
+  .tpad:active{cursor:grabbing}
+  .tpad.tut{border-color:var(--accent2);box-shadow:0 0 9px rgba(51,160,255,.35)}
+  .tarti{position:absolute;inset:0;pointer-events:none;opacity:.5;
+    background:linear-gradient(var(--border),var(--border)) center/1px 100% no-repeat,
+               linear-gradient(var(--border),var(--border)) center/100% 1px no-repeat}
+  .ttop{position:absolute;left:50%;top:50%;width:30%;height:30%;margin:-15% 0 0 -15%;
+    border-radius:50%;background:var(--accent2);border:2px solid #0a0f16;
+    box-shadow:0 0 9px rgba(51,160,255,.5);pointer-events:none;
+    transition:transform .05s linear}
+  .tetiket{font-size:9px;color:var(--muted);text-align:center;line-height:1.3}
+  .teksen{margin-top:9px;display:grid;grid-template-columns:auto 1fr auto;
+    gap:3px 6px;align-items:center}
+  .teksen>span{font-family:Consolas,monospace;font-size:9px;color:var(--muted);
+    letter-spacing:.5px}
+  .teksen>div{height:5px;background:var(--panel);border:1px solid var(--border);
+    border-radius:3px;position:relative;overflow:hidden}
+  .teksen>div>i{position:absolute;top:0;bottom:0;left:0;width:0;
+    background:var(--accent2);transition:.05s linear}
+  .teksen>b{font-family:Consolas,monospace;font-size:9px;color:var(--text);
+    font-variant-numeric:tabular-nums;min-width:30px;text-align:right}
+  .ttus{margin-top:8px;font-size:9px;color:var(--muted);line-height:1.6}
+  .ttus kbd{display:inline-flex;align-items:center;justify-content:center;
+    min-width:16px;height:16px;padding:0 3px;background:var(--panel);
+    border:1px solid var(--border);border-radius:4px;font-family:Consolas,monospace;
+    font-size:10px;color:var(--text);margin-right:2px}
+  .ttus kbd.on{background:var(--accent2);color:#04121f;border-color:var(--accent2)}
+  .tdurum{margin-top:7px;font-family:Consolas,monospace;font-size:9px;color:var(--muted)}
+  .tdurum b{color:var(--accent2)}
+
+  /* --- düğmeler --- */
+  .btn{
+    width:100%;padding:13px 14px;margin-bottom:9px;border-radius:8px;
+    border:1px solid var(--border);background:var(--panel2);color:var(--text);
+    font-size:14px;font-weight:600;cursor:pointer;text-align:left;
+    transition:.15s;display:flex;align-items:center;gap:9px;
+  }
+  .btn:hover{border-color:#3d4a5c;background:#1b2230}
+  /* ---- 3B konum grafiği ---- */
+  .baslik.g3b{display:flex;align-items:center;justify-content:space-between}
+  .g3btn{background:#161c27;border:1px solid #2a3342;color:#8fa3bd;
+    border-radius:5px;cursor:pointer;font-size:13px;line-height:1;
+    padding:3px 7px}
+  .g3btn:hover{border-color:#3d4a5c;color:#dce6f2}
+  .g3sar{position:relative;border:1px solid #2a3342;border-radius:7px;
+    background:#0b0f16;overflow:hidden}
+  .g3sar canvas{display:block;width:100%;height:190px;cursor:grab}
+  .g3sar canvas:active{cursor:grabbing}
+  .g3bilgi{position:absolute;top:6px;left:8px;right:8px;display:flex;
+    gap:10px;align-items:center;font-size:11px;color:#8fa3bd;
+    pointer-events:none}
+  .g3bilgi i{display:inline-block;width:8px;height:8px;border-radius:50%;
+    margin-right:4px;vertical-align:middle}
+  .g3bilgi b{margin-left:auto;color:#dce6f2;font-variant-numeric:tabular-nums}
+  .g3ipucu{position:absolute;bottom:5px;left:8px;font-size:10px;
+    color:#4a5768;pointer-events:none}
+  /* büyütülmüş hâl: ekranı kaplar */
+  .g3sar.buyuk{position:fixed;inset:3vh 3vw;z-index:60;height:auto;
+    box-shadow:0 20px 60px rgba(0,0,0,.6)}
+  .g3sar.buyuk canvas{height:94vh}
+  .btn.basla{background:#0d4f3c;border-color:#17a97c;color:#eafff7;
+             font-size:15px;padding:16px 14px;margin-bottom:16px}
+  .btn.basla:hover{background:#12674e}
+  .btn.basla:disabled{background:#1a2029;border-color:var(--border);
+                      color:var(--muted);cursor:default}
+  .kip{display:flex;flex-direction:column;gap:7px}
+  .kip button{
+    padding:11px;border-radius:7px;border:1px solid var(--border);
+    background:var(--panel2);color:var(--muted);font-size:13px;
+    font-weight:600;cursor:pointer;transition:.15s;
+  }
+  .kip button:hover{border-color:#3d4a5c;color:var(--text)}
+  .kip button.on{background:#1d4ed8;border-color:#3b82f6;color:#fff}
+  .kip button.on.g{background:#15803d;border-color:#22c55e}
+  .kip button.on.v{background:#b45309;border-color:#f59e0b}
+
+  /* --- kamera --- */
+  .kam{display:flex;align-items:center;justify-content:center;
+       background:#05070a;min-height:0;min-width:0;position:relative;padding:8px}
+  /* Görüntü alanı DOLDURUR: en-boy oranı korunur (object-fit:contain),
+     kutu koordinatları sunucuda çizildiği için ölçekleme kutuyu kaydırmaz. */
+  .kam img{width:100%;height:100%;object-fit:contain;border-radius:6px}
+  .kam .bos{color:var(--muted);font-size:14px;text-align:center;line-height:1.8}
+  /* Kaynak uyarısı: FPV oyunu DEĞİL başka pencereyi gösteriyorsa */
+  .kaynakUyari{position:absolute;left:0;right:0;top:0;z-index:5;
+    background:rgba(255,93,93,.94);color:#170406;font-size:12px;font-weight:600;
+    padding:7px 12px;line-height:1.45;letter-spacing:.2px}
+  .kam{position:relative}
+  .kam .bos b{color:var(--text);display:block;font-size:16px;margin-bottom:6px}
+
+  /* --- telemetri --- */
+  .satir{display:flex;justify-content:space-between;align-items:center;
+         padding:6px 0;border-bottom:1px solid #1a2028;font-size:12px}
+  .satir:last-child{border-bottom:0}
+  .satir i{color:var(--muted);font-style:normal}
+  .satir b{font-family:Consolas,monospace;font-size:13px;font-weight:600}
+  .rozet{padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;
+         letter-spacing:.5px}
+  .rozet.ok{background:#0d3d2c;color:var(--accent)}
+  .rozet.no{background:#3a1f1f;color:var(--danger)}
+  .rozet.gs{background:#4a2f0a;color:var(--warn)}
+  .fps{display:flex;gap:12px;margin-top:14px;padding-top:12px;
+       border-top:1px solid var(--border)}
+  .fps div{flex:1;text-align:center}
+  .fps b{display:block;font-family:Consolas,monospace;font-size:16px;
+         color:var(--accent2)}
+  .fps span{font-size:9px;color:var(--muted);letter-spacing:.6px}
+  .durumYazi{margin-top:12px;font-size:11px;color:var(--muted);line-height:1.6}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🛩️ AVCI DRONE — <span>YER KONTROL İSTASYONU</span></h1>
+  <div class="bag"><span class="nokta" id="bagNokta"></span>
+    <span id="bagYazi">bağlantı yok</span></div>
+</header>
+
+<div id="kilitBar">
+  <span id="kilitIkon">⛔</span>
+  <span id="kilitMetin">KİLİT YOK</span>
+  <div class="pbar"><div class="pfill" id="kilitFill"></div></div>
+  <span class="kSay"><b id="kilitSure">0.0</b> / 5.0 s</span>
+  <span class="kSay" id="kilitDetay">boyut — · merkez —</span>
+</div>
+
+<main>
+  <aside>
+    <div class="baslik">Görev</div>
+    <button id="baslaBtn" class="btn basla" onclick="gorevBaslat()">🚀 Görev Başlat</button>
+
+    <div class="baslik">Güdüm Kipi</div>
+    <div class="kip">
+      <button id="k_hibrit" onclick="kip('hibrit')">HİBRİT</button>
+      <button id="k_gps"    onclick="kip('gps')">GPS</button>
+      <button id="k_gorsel" onclick="kip('gorsel')">GÖRSEL</button>
+    </div>
+    <!-- ⭐ PANELDEKİ TEK ÖZELLİK (CLAUDE.md §0.1). Karar verilince
+         (girsin ya da elensin) bu düğme SİLİNİR. -->
+    <div class="baslik">Denenen Özellik</div>
+    <div class="kip">
+      <button id="k_kilitfaz" onclick="kilitFaziAcKapa()"
+        title="Görsel temas kurulunca doğrudan vuruşa gitme: önce ~6 m mesafe tut, hedefi AV dörtgeninde %6 büyüklüğünde tut, 10 s pencerede 5 s kilit biriktir; sonra terminal vuruşa geç (Teknofest 6.1.4).">🔒 KİLİT FAZI</button>
+    </div>
+    <!-- HEDEF İHA elle kontrol: resmî SDK Talon'a komut veremediği için
+         komutlar /api/talon -> dosya köprüsü -> oyundaki UE4SS modu gider. -->
+    <div class="baslik">Hedef Kontrolü</div>
+    <button id="talonBtn" class="btn" onclick="talonAcKapa()">🎯 Talon Kontrol</button>
+    <div id="talonPanel" class="tpanel" style="display:none">
+      <div class="tkols">
+        <div class="tkol">
+          <div class="tpad" id="padSol"><i class="tarti"></i><i class="ttop"></i></div>
+          <div class="tetiket">SOL<br>↕ yalnızca gaz</div>
+        </div>
+        <div class="tkol">
+          <div class="tpad" id="padSag"><i class="tarti"></i><i class="ttop"></i></div>
+          <div class="tetiket">SAĞ<br>↕ pitch · ↔ dönüş</div>
+        </div>
+      </div>
+      <div class="teksen">
+        <span>THR</span><div><i id="bThr"></i></div><b id="vThr">0.40</b>
+        <span>PIT</span><div><i id="bPit"></i></div><b id="vPit">0.00</b>
+        <span>ROL</span><div><i id="bRol"></i></div><b id="vRol">0.00</b>
+      </div>
+      <div class="ttus">
+        <kbd data-t="thrU">I</kbd><kbd data-t="thrD">K</kbd> gaz<br>
+        <kbd data-t="pitU">↑</kbd><kbd data-t="pitD">↓</kbd> pitch &nbsp;
+        <kbd data-t="rolL">←</kbd><kbd data-t="rolR">→</kbd> roll
+      </div>
+      <div class="tdurum" id="talonDurum">Kapalı</div>
+    </div>
+
+    <div class="durumYazi" id="solDurum">Hazır.</div>
+  </aside>
+
+  <div class="kam">
+    <img id="kam" alt="" style="display:none">
+    <div class="kaynakUyari" id="kaynakUyari" style="display:none">
+      ⚠ FPV oyunu göstermiyor — oyun penceresinin üstü kapalı.
+      Görüntü <b>donduruldu</b>; oyunu öne al ya da paneli başka ekranda aç.
+    </div>
+    <div class="bos" id="kamBos"><b>Görüntü bekleniyor</b>
+      Uçuş süreci başlayınca akış otomatik gelir.</div>
+  </div>
+
+  <div class="sag">
+    <div class="baslik">Durum</div>
+    <div id="telem"></div>
+    <div class="fps">
+      <div><b id="f1">—</b><span>YAKALAMA</span></div>
+      <div><b id="f2">—</b><span>DEDEKTÖR</span></div>
+    </div>
+
+    <!-- ⭐ 3B KONUM GRAFİĞİ (2026-08-26, kullanıcı isteği)
+         Dış kütüphane YOK: izdüşüm elle hesaplanıyor. Sebep — sayfa yerel
+         sunucudan geliyor ve kampanya makinesinde internet garantisi yok;
+         CDN'e bağımlı bir grafik ilk kesintide boş kutu olurdu. -->
+    <div class="baslik g3b">
+      <span>3B Konum</span>
+      <button id="g3Buyut" class="g3btn" title="Büyüt / küçült">⤢</button>
+    </div>
+    <div id="g3sar" class="g3sar">
+      <canvas id="g3" class="g3"></canvas>
+      <div class="g3bilgi">
+        <span><i style="background:#31d0aa"></i>avcı</span>
+        <span><i style="background:#ff7043"></i>hedef</span>
+        <b id="g3mes">—</b>
+      </div>
+      <div class="g3ipucu">sürükle: döndür · tekerlek: yakınlaştır · çift tık: sıfırla</div>
+    </div>
+  </div>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+
+// ---- kamera: sunucunun MJPEG akışı (kutu SUNUCUDA çizili) ----
+const kam = $("kam"), kamBos = $("kamBos");
+function kamBagla(){
+  kam.onload = () => { kam.style.display = "block"; kamBos.style.display = "none"; };
+  kam.onerror = () => { kam.style.display = "none"; kamBos.style.display = "block"; };
+  kam.src = "/video?t=" + Date.now();
+}
+kamBagla();
+
+// ---- güdüm kipi ----
+async function kip(k){
+  try{
+    await fetch("/api/command", {method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({cmd:"vismode", mode:{hibrit:"OTO",gps:"GPS",gorsel:"GORSEL"}[k]})});
+    kipGoster(k);
+  }catch(e){}
+}
+// ---- KİLİT FAZI aç/kapa (panelin tek özelliği) ----
+async function kilitFaziAcKapa(){
+  try{
+    const r = await fetch("/ozellik", {method:"POST",
+      headers:{"Content-Type":"application/json"}, body:"{}"});
+    const j = await r.json();
+    kilitFaziGoster(!!j.acik);
+  }catch(e){}
+}
+function kilitFaziGoster(acik){
+  const b = $("k_kilitfaz");
+  if(b) b.className = acik ? "on v" : "";
+}
+function kipGoster(k){
+  for(const [ad,snf] of [["hibrit",""],["gps","g"],["gorsel","v"]]){
+    const b = $("k_"+ad);
+    if(b) b.className = (ad===k) ? ("on "+snf) : "";
+  }
+}
+
+// ============================================================
+// 3B KONUM GRAFİĞİ — avcı + hedef, izli
+// ============================================================
+// ⛔ DIŞ KÜTÜPHANE YOK. Sayfa yerel sunucudan geliyor ve kampanya
+//    makinesinde internet garantisi yok; CDN'e bağlı bir grafik ilk
+//    kesintide boş kutu olurdu. İzdüşüm elle hesaplanıyor (~80 satır).
+//
+// EKSEN: oyun dünyası metre. z = YUKARI. Grafik z'yi dikey eksen yapar.
+// ⛔ §10: buradaki hedef konumu YALNIZ EKRANA gider — görsel güdüm
+//    (`Beyin._gorsel_tik_kilitli`) bu veriyi görmez, girdisi yalnız
+//    görüntüdür. `gercek_mesafe_m` ile aynı statü.
+const G3 = {
+  az: -0.9, el: 0.55, olcek: 1,          // kamera açıları + yakınlaştırma
+  iz: {avci: [], hedef: []}, IZ_MAKS: 400,
+  merkez: null, yari: 60,                 // otomatik çerçeveleme
+  surukle: null,
+};
+
+function g3Boyut(){
+  const c = $("g3"); if(!c) return null;
+  const r = c.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  if(c.width !== Math.round(r.width*dpr) || c.height !== Math.round(r.height*dpr)){
+    c.width = Math.round(r.width*dpr); c.height = Math.round(r.height*dpr);
+  }
+  return {c, w:r.width, h:r.height, dpr};
+}
+
+// dünya (x,y,z) -> ekran (px,py). Basit yörünge kamerası + zayıf perspektif.
+function g3Yans(p, S){
+  const m = G3.merkez || {x:0,y:0,z:0};
+  let dx = p.x - m.x, dy = p.y - m.y, dz = p.z - m.z;
+  const ca = Math.cos(G3.az), sa = Math.sin(G3.az);
+  let X = dx*ca - dy*sa, Y = dx*sa + dy*ca;
+  const ce = Math.cos(G3.el), se = Math.sin(G3.el);
+  const Y2 = Y*ce - dz*se, Z2 = Y*se + dz*ce;
+  const k = (Math.min(S.w, S.h) * 0.42 / Math.max(1, G3.yari)) * G3.olcek;
+  return {x: S.w/2 + X*k, y: S.h/2 - Z2*k, derinlik: Y2};
+}
+
+function g3Ciz(){
+  const S = g3Boyut(); if(!S) return;
+  const g = S.c.getContext("2d");
+  g.setTransform(S.dpr,0,0,S.dpr,0,0);
+  g.clearRect(0,0,S.w,S.h);
+  g.fillStyle = "#0b0f16"; g.fillRect(0,0,S.w,S.h);
+  if(!G3.merkez){
+    g.fillStyle="#4a5768"; g.font="12px system-ui"; g.textAlign="center";
+    g.fillText("konum bekleniyor…", S.w/2, S.h/2); return;
+  }
+
+  // --- zemin ızgarası (hedefin irtifasında değil, MERKEZİN altında) ---
+  const adim = Math.max(10, Math.round(G3.yari/3/10)*10);
+  const n = 4, taban = G3.merkez.z - G3.yari*0.8;
+  g.strokeStyle = "#1a2230"; g.lineWidth = 1;
+  for(let i=-n;i<=n;i++){
+    for(const eksen of [0,1]){
+      const a = {x:G3.merkez.x + (eksen? i*adim : -n*adim),
+                 y:G3.merkez.y + (eksen? -n*adim : i*adim), z:taban};
+      const b = {x:G3.merkez.x + (eksen? i*adim :  n*adim),
+                 y:G3.merkez.y + (eksen?  n*adim : i*adim), z:taban};
+      const pa = g3Yans(a,S), pb = g3Yans(b,S);
+      g.beginPath(); g.moveTo(pa.x,pa.y); g.lineTo(pb.x,pb.y); g.stroke();
+    }
+  }
+  // ölçek etiketi
+  g.fillStyle="#3d4a5c"; g.font="10px system-ui"; g.textAlign="left";
+  g.fillText(adim+" m ızgara", 8, S.h-8);
+
+  // --- izler ---
+  const izCiz = (dizi, renk) => {
+    if(dizi.length < 2) return;
+    g.lineWidth = 1.5;
+    for(let i=1;i<dizi.length;i++){
+      const a = g3Yans(dizi[i-1],S), b = g3Yans(dizi[i],S);
+      g.strokeStyle = renk + Math.max(0.06, i/dizi.length*0.85).toFixed(2) + ")";
+      g.beginPath(); g.moveTo(a.x,a.y); g.lineTo(b.x,b.y); g.stroke();
+    }
+  };
+  izCiz(G3.iz.hedef, "rgba(255,112,67,");
+  izCiz(G3.iz.avci,  "rgba(49,208,170,");
+
+  // --- noktalar (derinliğe göre sırala: uzak önce) ---
+  const son = (d) => d.length ? d[d.length-1] : null;
+  const nok = [];
+  const a = son(G3.iz.avci), h = son(G3.iz.hedef);
+  if(h) nok.push({p:g3Yans(h,S), r:"#ff7043", ad:"hedef", w:h});
+  if(a) nok.push({p:g3Yans(a,S), r:"#31d0aa", ad:"avcı",  w:a});
+  nok.sort((u,v)=>v.p.derinlik-u.p.derinlik);
+
+  // ikisi arasındaki bağ
+  if(a && h){
+    const pa=g3Yans(a,S), ph=g3Yans(h,S);
+    g.strokeStyle="rgba(140,160,190,.35)"; g.setLineDash([4,4]); g.lineWidth=1;
+    g.beginPath(); g.moveTo(pa.x,pa.y); g.lineTo(ph.x,ph.y); g.stroke();
+    g.setLineDash([]);
+  }
+  for(const o of nok){
+    // zemine dik iz (irtifa hissi)
+    const ayak = g3Yans({x:o.w.x,y:o.w.y,z:taban},S);
+    g.strokeStyle="rgba(120,140,170,.22)"; g.lineWidth=1;
+    g.beginPath(); g.moveTo(o.p.x,o.p.y); g.lineTo(ayak.x,ayak.y); g.stroke();
+    g.fillStyle="rgba(120,140,170,.30)";
+    g.beginPath(); g.ellipse(ayak.x,ayak.y,3,1.5,0,0,6.284); g.fill();
+    // nokta
+    g.fillStyle=o.r; g.beginPath(); g.arc(o.p.x,o.p.y,5,0,6.284); g.fill();
+    g.strokeStyle="rgba(0,0,0,.5)"; g.lineWidth=1.5; g.stroke();
+  }
+}
+
+function g3Ekle(avci, hedef){
+  const ekle = (dizi, p) => {
+    if(!p) return;
+    const s = dizi[dizi.length-1];
+    if(s && Math.abs(s.x-p.x)<0.05 && Math.abs(s.y-p.y)<0.05
+         && Math.abs(s.z-p.z)<0.05) return;      // aynı nokta -> ekleme
+    dizi.push(p);
+    if(dizi.length > G3.IZ_MAKS) dizi.shift();
+  };
+  ekle(G3.iz.avci, avci); ekle(G3.iz.hedef, hedef);
+
+  // otomatik çerçeveleme: iki aracı da kapsa, ani zıplamasın
+  const hepsi = G3.iz.avci.concat(G3.iz.hedef);
+  if(!hepsi.length) return;
+  let mnx=1e9,mxx=-1e9,mny=1e9,mxy=-1e9,mnz=1e9,mxz=-1e9;
+  for(const p of hepsi){
+    mnx=Math.min(mnx,p.x); mxx=Math.max(mxx,p.x);
+    mny=Math.min(mny,p.y); mxy=Math.max(mxy,p.y);
+    mnz=Math.min(mnz,p.z); mxz=Math.max(mxz,p.z);
+  }
+  const hedefMerkez = {x:(mnx+mxx)/2, y:(mny+mxy)/2, z:(mnz+mxz)/2};
+  const hedefYari = Math.max(25, mxx-mnx, mxy-mny, mxz-mnz) * 0.75;
+  if(!G3.merkez){ G3.merkez = hedefMerkez; G3.yari = hedefYari; }
+  else{
+    const k = 0.08;                                  // yumuşat
+    G3.merkez.x += (hedefMerkez.x-G3.merkez.x)*k;
+    G3.merkez.y += (hedefMerkez.y-G3.merkez.y)*k;
+    G3.merkez.z += (hedefMerkez.z-G3.merkez.z)*k;
+    G3.yari     += (hedefYari-G3.yari)*k;
+  }
+}
+
+(function g3Kur(){
+  const c = $("g3"); if(!c) return;
+  c.addEventListener("mousedown", e => {
+    G3.surukle = {x:e.clientX, y:e.clientY, az:G3.az, el:G3.el};
+  });
+  window.addEventListener("mousemove", e => {
+    if(!G3.surukle) return;
+    G3.az = G3.surukle.az + (e.clientX-G3.surukle.x)*0.008;
+    G3.el = Math.max(-1.45, Math.min(1.45,
+              G3.surukle.el + (e.clientY-G3.surukle.y)*0.008));
+    g3Ciz();
+  });
+  window.addEventListener("mouseup", () => { G3.surukle = null; });
+  c.addEventListener("wheel", e => {
+    e.preventDefault();
+    G3.olcek = Math.max(0.25, Math.min(6, G3.olcek * (e.deltaY<0?1.12:0.89)));
+    g3Ciz();
+  }, {passive:false});
+  c.addEventListener("dblclick", () => {
+    G3.az=-0.9; G3.el=0.55; G3.olcek=1; g3Ciz();
+  });
+  const b = $("g3Buyut");
+  if(b) b.onclick = () => {
+    $("g3sar").classList.toggle("buyuk");
+    setTimeout(g3Ciz, 60);
+  };
+  window.addEventListener("resize", () => g3Ciz());
+  window.addEventListener("keydown", e => {
+    if(e.key === "Escape") {
+      const w = $("g3sar");
+      if(w && w.classList.contains("buyuk")){ w.classList.remove("buyuk"); setTimeout(g3Ciz,60); }
+    }
+  });
+  g3Ciz();
+})();
+
+// ---- görev başlat ----
+async function gorevBaslat(){
+  $("baslaBtn").disabled = true;
+  $("solDurum").textContent = "Görev başlatılıyor…";
+  try{
+    const r = await (await fetch("/api/command",{method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({cmd:"basla"})})).json();
+    $("solDurum").textContent = r.msg || "Görev başladı.";
+    if(!r.ok) $("baslaBtn").disabled = false;
+  }catch(e){
+    $("solDurum").textContent = "Sunucuya ulaşılamadı.";
+    $("baslaBtn").disabled = false;
+  }
+}
+
+// ---- telemetri ----
+const ALANLAR = [
+  ["faz",        t => t.gorsel && t.gorsel.durum],
+  ["hedef menzil", t => t.distance_m!=null ? t.distance_m.toFixed(1)+" m" : null],
+  ["kutu",       t => t.gorsel && t.gorsel.tespit
+                     ? (t.gorsel.tespit.w*1920).toFixed(0)+" px" : null],
+  ["güven",      t => t.gorsel && t.gorsel.tespit
+                     ? t.gorsel.tespit.conf.toFixed(2) : null],
+  ["kutu kaynağı", t => t.takip && t.takip.kaynak
+                     ? (t.takip.kaynak==="tahmin" ? "öngörü" : "ölçüm") : null],
+  ["hız",        t => t.drone ? t.drone.speed_ms.toFixed(1)+" m/s" : null],
+  ["irtifa",     t => t.drone ? t.drone.altitude_m.toFixed(0)+" m" : null],
+  ["çıkarım",    t => t.gorsel && t.gorsel.perf
+                     ? t.gorsel.perf.det_ms.toFixed(0)+" ms" : null],
+];
+
+async function tik(){
+  try{
+    const t = await (await fetch("/api/telemetry")).json();
+    const bagli = !!(t.gorsel && t.gorsel.durum && t.gorsel.durum !== "-");
+    $("bagNokta").className = "nokta" + (bagli ? " on" : "");
+    $("bagYazi").textContent = bagli ? "uçuş sürüyor" : "beklemede";
+    if(bagli) $("baslaBtn").disabled = true;
+
+    // ---- 3B konum grafiği ----
+    //   hedef konumu GORSEL fazda `h_*`ten gelmez (§10: GPS okunmaz);
+    //   panel truth kanalına düşüyor, bu yüzden grafik donmuyor.
+    const d3 = t.drone || {}, h3 = t.target || {};
+    const say = v => (typeof v === "number" && isFinite(v)) ? v : null;
+    const pa = (say(d3.x)!==null && say(d3.y)!==null && say(d3.z)!==null)
+             ? {x:d3.x, y:d3.y, z:d3.z} : null;
+    const ph = (say(h3.x)!==null && say(h3.y)!==null && say(h3.z)!==null)
+             ? {x:h3.x, y:h3.y, z:h3.z} : null;
+    if(pa || ph){
+      g3Ekle(pa, ph);
+      g3Ciz();
+      const m = $("g3mes");
+      if(m){
+        if(pa && ph){
+          const dd = Math.hypot(pa.x-ph.x, pa.y-ph.y, pa.z-ph.z);
+          m.textContent = dd.toFixed(1) + " m";
+        } else m.textContent = "—";
+      }
+    }
+
+    let h = "";
+    for(const [ad, fn] of ALANLAR){
+      let v = null; try{ v = fn(t); }catch(e){}
+      h += `<div class="satır satir"><i>${ad}</i><b>${v==null?"—":v}</b></div>`;
+    }
+    $("telem").innerHTML = h;
+
+    const kl = (t.gorsel && t.gorsel.kilit) || {};
+    kilitFaziGoster(!!kl.faz_acik);
+    // ⚠ İKİ SAYI VAR: `gudum_s` GÜDÜMÜN muhasebesi (çıkarım hızında, faz
+    //   geçişini O belirler), `sure` panelin kendi penceresi (gösterim).
+    //   Kilit fazı AÇIKSA karar veren sayıyı gösteririz.
+    const sure = (kl.faz_acik && kl.gudum_s!=null) ? kl.gudum_s : (kl.sure || 0);
+    const gerek = kl.gerek || 5;
+    $("kilitSure").textContent = sure.toFixed(1);
+    $("kilitFill").style.width = Math.min(100, 100*sure/gerek) + "%";
+    const tam = kl.saglandi || sure >= gerek;
+    $("kilitBar").className = tam ? "on" : "";
+    $("kilitIkon").textContent = tam ? "✅" : (kl.anlik ? "🔓" : "⛔");
+    const faz = kl.faz || "-";
+    $("kilitMetin").textContent = !kl.faz_acik
+        ? (tam ? "ATIŞA HAZIR" : (kl.anlik ? "KİLİTLENİYOR" : "KİLİT YOK"))
+        : (faz === "TERMINAL" && tam ? "TERMİNAL — VURUŞ"
+           : (kl.anlik ? "KİLİT FAZI — KİLİTLENİYOR" : "KİLİT FAZI — KİLİT YOK"));
+    $("kilitDetay").textContent =
+      "boyut " + (kl.kaplama_pct!=null ? kl.kaplama_pct.toFixed(1)+"%" : "—")
+      + " / " + (100*(kl.esik_pct||0.06)).toFixed(0) + "% · merkez "
+      + (kl.av ? "içinde ✓" : "dışında ✗")
+      + (kl.faz_acik ? " · faz " + faz : "");
+
+    const p = (t.gorsel && t.gorsel.perf) || {};
+    // Kaynak kapısı: sunucu kareyi HUD imzasıyla sınıyor. ok=false ise
+    // yayın DONDURULDU (son iyi kare duruyor) — operatör bunu bilmeli.
+    const kk = t.kaynak_kare || {ok:true};
+    const uy = $("kaynakUyari");
+    if(uy) uy.style.display = kk.ok ? "none" : "block";
+
+    $("f1").textContent = (p.yakala_fps||0).toFixed(1);
+    $("f2").textContent = (p.fps||0).toFixed(1);
+    if(t.kip) kipGoster(t.kip);
+  }catch(e){
+    $("bagNokta").className = "nokta";
+    $("bagYazi").textContent = "sunucu kapalı";
+  }
+}
+setInterval(tik, 400); tik();
+
+// ===========================================================================
+//  HEDEF İHA (Talon) ELLE KONTROL — iki sanal joystick + klavye
+// ---------------------------------------------------------------------------
+//  ⛔ Resmî SDK Talon'a KOMUT VEREMEZ (yalnızca get_target_* okur). Zincir:
+//       panel -> /api/talon -> /tmp/talon_kopru.txt -> UE4SS modu -> Talon
+//     Oyun tarafı Talon'u `BPC_AIMove.isDead = true` ile spline rotasından
+//     kopartır; uçuş modelini mod hesaplar. (Teleport / dondurma / nuclear
+//     freeze yöntemlerinin HEPSİ ölçüldü ve 1.5 sn içinde geri snap'liyordu.)
+//
+//  RC VERİCİ DÜZENİ (Mode 2):
+//     SOL kol : ↕ throttle — YAPIŞKAN, bıraktığında kaldığı yerde durur
+//               ↔ KİLİTLİ — kol yaw uygulamaz (gazı ayarlarken parmak yana
+//                  kayıp istemsiz yaw veriyordu). Dönüş sağ kolun roll'ü ile.
+//     SAĞ kol : ↕ pitch · ↔ roll — ikisi de yaylı
+//     Gerçek bir vericide gaz kolu geri yaylanmaz; burada da öyle. Hedefe
+//     bir hız verip elini çekebilirsin.
+//
+//  KLAVYE:  I/K gaz · ↑/↓ pitch · ←/→ roll   (yaw YOK — dönüş roll ile)
+//     Basılı tut -> eksen dolu; bırak -> 0, yani irtifa ve yön O ANKİ
+//     değerde kilitlenir. Kol ve klavye TOPLANIR, sonuç -1..1'e kısılır.
+// ===========================================================================
+let talonAcik = false, talonTimer = null;
+// ⛔ `desenKipi` SİLİNDİ (2026-08-27, §5.12 — kullanıcı kararı): kare/daire
+//   desenleri gerçekçi değildi ve oyun tarafında hedefin parçalarını
+//   koparıyordu. Oyun tarafındaki karşılığı da (UE4SS modu) çıkarıldı.
+//   Elle kumanda DURUYOR — `araclar/manevra.py` kısa süreli devralma
+//   için onu kullanıyor.
+let tThr = 0.40;                      // yapışkan gaz (0..1)
+let sPit = 0, sRol = 0;               // kol eksenleri (yaylı)
+const tkb = {thrU:0,thrD:0,pitU:0,pitD:0,rolL:0,rolR:0};
+const TKOD = {KeyI:"thrU",KeyK:"thrD",
+              ArrowUp:"pitU",ArrowDown:"pitD",ArrowLeft:"rolL",ArrowRight:"rolR"};
+const kis1 = v => Math.max(-1, Math.min(1, v));
+
+function tEksen(){
+  // yaw KALDIRILDI (kullanıcı isteği): dönüş yalnızca roll ile yapılır —
+  // sabit kanatta doğrusu da bu. Protokolde alan DURUYOR, hep 0 gider;
+  // böylece köprü biçimi ve oyun tarafındaki mod değişmeden kalır.
+  return {throttle: Math.max(0, Math.min(1, tThr)),
+          yaw:   0,
+          pitch: kis1(sPit + (tkb.pitU?1:0) - (tkb.pitD?1:0)),
+          roll:  kis1(sRol + (tkb.rolR?1:0) - (tkb.rolL?1:0))};
+}
+
+function tGorsel(){
+  const e = tEksen();
+  const cubuk = (id, v, orta) => {
+    const el = $(id); if(!el) return;
+    if(orta){ const w = Math.abs(v)*50; el.style.left = (v<0 ? 50-w : 50)+"%"; el.style.width = w+"%"; }
+    else    { el.style.left = "0%"; el.style.width = (v*100)+"%"; }
+  };
+  cubuk("bThr", e.throttle, false);
+  cubuk("bPit", e.pitch, true); cubuk("bRol", e.roll, true);
+  const yaz = (id,v)=>{ const el=$(id); if(el) el.textContent = v.toFixed(2); };
+  yaz("vThr",e.throttle); yaz("vPit",e.pitch); yaz("vRol",e.roll);
+  document.querySelectorAll("#talonPanel kbd").forEach(el=>{
+    el.classList.toggle("on", !!tkb[el.dataset.t]);
+  });
+  const d = $("talonDurum"); if(!d) return;
+  if(!talonAcik){ d.textContent = "Kapalı"; return; }
+  const dv = e.pitch>0.05 ? "TIRMANIYOR" : (e.pitch<-0.05 ? "ALÇALIYOR" : "irtifa sabit");
+  const yn = e.roll>0.05 ? "SAĞA" : (e.roll<-0.05 ? "SOLA" : "düz");
+  d.innerHTML = "<b>"+dv+"</b> · "+yn+" · "+Math.round(300+e.throttle*3700)+" cm/s";
+}
+
+function tGonder(){
+  if(!talonAcik) return;
+  const e = tEksen(); e.aktif = true;
+  fetch("/api/talon",{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify(e)}).catch(()=>{});
+}
+
+// Sanal kol: pointer olayları (fare ve dokunma aynı kod yolundan)
+function kolKur(padId, gazKolu){
+  const pad = $(padId); if(!pad) return;
+  const top = pad.querySelector(".ttop");
+  let tut = false, pid = null;
+  let nx = 0, ny = gazKolu ? -(tThr*2-1) : 0;   // gaz kolu mevcut değerinden başlar
+
+  // translate YÜZDESİ topuzun KENDİ boyutuna göredir. Topuz pad'in %30'u,
+  // kenara gitmesi için pad'in %35'i kadar kayması gerekir -> 35/30 = %117.
+  const ciz = () => { top.style.transform = "translate("+(nx*117)+"%,"+(ny*117)+"%)"; };
+  function uygula(){
+    // Sol kol YALNIZCA gaz: yatay eksen kilitli. Gazı dikey ayarlarken parmak
+    // kaçınılmaz olarak yana kayıyordu ve istemsiz yaw giriyordu.
+    // Dönüş artık roll (sağ kol ↔) ile yapılır — sabit kanatta doğrusu da bu.
+    if(gazKolu){ nx = 0; tThr = Math.max(0, Math.min(1, (-ny+1)/2)); }
+    else       { sRol = nx; sPit = -ny; }
+    ciz(); tGorsel(); tGonder();
+  }
+  function konum(ev){
+    const r = pad.getBoundingClientRect();
+    let x = gazKolu ? 0 : (ev.clientX - r.left - r.width/2)/(r.width/2);
+    let y = (ev.clientY - r.top  - r.height/2)/(r.height/2);
+    const m = Math.hypot(x,y); if(m>1){ x/=m; y/=m; }
+    nx = x; ny = y; uygula();
+  }
+  pad.addEventListener("pointerdown", ev=>{
+    tut = true; pid = ev.pointerId; pad.setPointerCapture(pid);
+    pad.classList.add("tut"); konum(ev); ev.preventDefault();
+  });
+  pad.addEventListener("pointermove", ev=>{ if(tut && ev.pointerId===pid) konum(ev); });
+  function birak(ev){
+    if(!tut || (ev && ev.pointerId!==pid)) return;
+    tut = false; pad.classList.remove("tut");
+    try{ pad.releasePointerCapture(pid); }catch(e){}
+    nx = 0;                    // yatay eksen HER ZAMAN ortaya döner
+    if(!gazKolu) ny = 0;       // gaz kolu dikeyde KALIR (yapışkan)
+    uygula();
+  }
+  pad.addEventListener("pointerup", birak);
+  pad.addEventListener("pointercancel", birak);
+  pad.addEventListener("lostpointercapture", birak);
+  ciz();
+}
+
+function tTusBas(e){
+  if(e.ctrlKey||e.metaKey||e.altKey) return;
+  const k = TKOD[e.code]; if(!k) return;
+  e.preventDefault();
+  if(!tkb[k]){ tkb[k]=1; tGorsel(); tGonder(); }
+}
+function tTusBirak(e){
+  const k = TKOD[e.code]; if(!k) return;
+  e.preventDefault();
+  if(tkb[k]){ tkb[k]=0; tGorsel(); tGonder(); }    // bırak -> kilitlen
+}
+function tHepsiniBirak(){
+  let d=0; for(const k in tkb){ if(tkb[k]){ tkb[k]=0; d=1; } }
+  sPit = sRol = 0; tGorsel(); if(d) tGonder();
+}
+
+// 12 Hz akış: gaz tuşlarını rampala + tazelik sayacını ilerlet
+function tTik(){
+  if(!talonAcik) return;
+  if(tkb.thrU || tkb.thrD){
+    tThr = Math.max(0, Math.min(1, tThr + (tkb.thrU?0.02:0) - (tkb.thrD?0.02:0)));
+    tGorsel();
+  }
+  tGonder();
+}
+
+function talonAcKapa(){
+  if(!talonAcik){
+    talonAcik = true;
+    $("talonBtn").classList.add("acik");
+    $("talonPanel").style.display = "block";
+    addEventListener("keydown", tTusBas);
+    addEventListener("keyup", tTusBirak);
+    addEventListener("blur", tHepsiniBirak);
+    talonTimer = setInterval(tTik, 80);
+    tGorsel(); tGonder();
+  } else {
+    talonAcik = false;
+    $("talonBtn").classList.remove("acik");
+    $("talonPanel").style.display = "none";
+    for(const k in tkb) tkb[k]=0;
+    sPit = sRol = 0;
+    removeEventListener("keydown", tTusBas);
+    removeEventListener("keyup", tTusBirak);
+    removeEventListener("blur", tHepsiniBirak);
+    if(talonTimer){ clearInterval(talonTimer); talonTimer=null; }
+    tGorsel();
+    // kapanış: aktif=false -> mod isDead'i geri alır, Talon rotasına döner
+    fetch("/api/talon",{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({aktif:false,throttle:0,yaw:0,pitch:0,roll:0})}).catch(()=>{});
+  }
+}
+kolKur("padSol", true);    // sol kol: dikey eksen yapışkan (gaz)
+kolKur("padSag", false);   // sağ kol: iki eksen de yaylı
+tGorsel();
+</script>
+</body>
+</html>

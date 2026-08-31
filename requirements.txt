@@ -1,0 +1,10 @@
+# Drone yer kontrol istasyonu
+pyserial>=3.5          # ELRS/CRSF seri bağı
+opencv-python>=4.8     # yakalama kartı + MJPEG
+numpy>=1.24
+pygame>=2.5            # kumandayı USB joystick olarak okumak
+# Talon yayıncısı
+pymavlink>=2.4.37
+# Görsel güdüm (isteğe bağlı — model gerekir)
+# ultralytics>=8.3
+# torch
