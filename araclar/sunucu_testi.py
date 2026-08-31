@@ -30,13 +30,21 @@ from gercek.sunucu import SunucuIstemcisi, SunucuCfg     # noqa: E402
 
 
 def _sahte_telemetri():
-    """§7.1 biçiminde, BİÇİMİ geçerli sahte paket. 14 alan."""
+    """SUNUCUNUN GERÇEK ŞEMASINDA sahte paket — 14 alan.
+
+    ⛔ Adlar haberleşme dokümanının PDF'inden DEĞİL, komiteden gelen
+      gerçek C# şemasından. İkisi tutmuyor; PDF adlarıyla gönderirsek
+      sunucu paketi KABUL EDER (HTTP 200) ama her alanı SIFIR okur.
+      Bkz. `drone_yki._telemetri` ve bekçi R128.
+    """
     return {
-        "takim_no": SunucuCfg.TAKIM_NO,
-        "enlem": 41.0000000, "boylam": 29.0000000, "irtifa": 50.0,
-        "dikilme": 0.0, "yonelme": 0.0, "yatis": 0.0, "hiz": 0.0,
-        "mod": 0, "kilitlenme": 0,
-        "hedef_x_merkezi": 0, "hedef_y_merkezi": 0,
+        "takim_numarasi": SunucuCfg.TAKIM_NO,
+        "iha_enlem": 41.0000000, "iha_boylam": 29.0000000,
+        "iha_irtifa": 50.0,
+        "iha_dikilme": 0.0, "iha_yonelme": 0.0, "iha_yatis": 0.0,
+        "iha_hiz": 0.0,
+        "iha_mod": False, "iha_kilitlenme": False,
+        "hedef_merkez_X": 0, "hedef_merkez_Y": 0,
         "hedef_genislik": 0, "hedef_yukseklik": 0,
     }
 

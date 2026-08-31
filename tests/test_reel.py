@@ -1522,9 +1522,11 @@ def test_R51_sunucu_2Hz_USTUNE_CIKMIYOR():
 
 # ---------------------------------------------------------------- R52
 def test_R52_telemetri_paketi_SARTNAME_ALANLARINI_tasiyor():
-    """Haberleşme dokümanı §7.1'deki 13 alanın hepsi bulunmalı.
+    """Paketteki 14 alanın hepsi bulunmalı ve DEĞER ARALIKLARI doğru olmalı.
 
     ⛔ Eksik alan -> 204 (paket biçimi yanlış) -> sistemde hiç görünmeyiz.
+    ⛔ ADLAR SUNUCUNUN GERÇEK ŞEMASINDAN (bkz. R128) — PDF'inkinden DEĞİL.
+      PDF adlarıyla gönderirsek sunucu 200 döner ama her alanı SIFIR okur.
     """
     sys.path.insert(0, os.path.join(REEL))
     import drone_yki
@@ -1535,16 +1537,17 @@ def test_R52_telemetri_paketi_SARTNAME_ALANLARINI_tasiyor():
     P._D["son_kutu"] = (960, 540, 30, 43)
     P._D["olcut"] = {"saglandi": True}
     t = drone_yki._telemetri(gb, ks, None)
-    for alan in ("takim_no", "enlem", "boylam", "irtifa", "dikilme",
-                 "yonelme", "yatis", "hiz", "mod", "kilitlenme",
-                 "hedef_x_merkezi", "hedef_y_merkezi",
-                 "hedef_genislik", "hedef_yukseklik"):
-        assert alan in t, "şartname alanı eksik: %s" % alan
-    # doküman: yonelme 0..360, dikilme/yatis -90..+90
-    assert 0.0 <= t["yonelme"] < 360.0
-    assert -90.0 <= t["dikilme"] <= 90.0 and -90.0 <= t["yatis"] <= 90.0
-    assert t["kilitlenme"] == 1
-    assert (t["hedef_x_merkezi"], t["hedef_genislik"]) == (960, 30)
+    for alan in ("takim_numarasi", "iha_enlem", "iha_boylam", "iha_irtifa",
+                 "iha_dikilme", "iha_yonelme", "iha_yatis", "iha_hiz",
+                 "iha_mod", "iha_kilitlenme", "hedef_merkez_X",
+                 "hedef_merkez_Y", "hedef_genislik", "hedef_yukseklik"):
+        assert alan in t, "sunucu şeması alanı eksik: %s" % alan
+    # doküman §6: yonelme 0..360, dikilme/yatis -90..+90
+    assert 0.0 <= t["iha_yonelme"] < 360.0
+    assert -90.0 <= t["iha_dikilme"] <= 90.0
+    assert -90.0 <= t["iha_yatis"] <= 90.0
+    assert t["iha_kilitlenme"] is True
+    assert (t["hedef_merkez_X"], t["hedef_genislik"]) == (960, 30)
 
 
 # ---------------------------------------------------------------- R53
@@ -1564,12 +1567,12 @@ def test_R53_mod_alani_GERCEGI_soyluyor():
     ks.kip_sec("OTONOM")
     km.c.kip_anahtari = False                     # PİLOT VETO
     ks.otonom_yaz(0.1, 0, 0, 0); ks.tik()
-    assert drone_yki._telemetri(gb, ks, None)["mod"] == 0, (
+    assert drone_yki._telemetri(gb, ks, None)["iha_mod"] is False, (
         "pilot veto ettiği hâlde sunucuya 'otonom' beyan edildi")
 
     km.c.kip_anahtari = True
     ks.otonom_yaz(0.1, 0, 0, 0); ks.tik()
-    assert drone_yki._telemetri(gb, ks, None)["mod"] == 1
+    assert drone_yki._telemetri(gb, ks, None)["iha_mod"] is True
 
 
 # ---------------------------------------------------------------- R54
@@ -3930,3 +3933,117 @@ def test_R127_VIDEO_KAYDI_gercekten_OKUNABILIR_dosya_yaziyor():
         import importlib
         from gercek import video_kayit as _V
         importlib.reload(_V)
+
+
+# ---------------------------------------------------------------- R128
+def test_R128_TELEMETRI_SUNUCUNUN_GERCEK_SEMASINI_kullaniyor():
+    """⛔⛔ Alan adları SUNUCUNUN şemasından, dokümanın PDF'inden DEĞİL.
+
+    ⛔ YAŞANDI (2026-08-31, saha testi): doküman §7.1'deki adlarla
+      gönderdik. Sunucu HTTP **200** döndü, `hata 0` gördük ve
+      "haberleşme çalışıyor" diye hüküm kurduk. Oysa sunucu tanımadığı
+      alanları ATIYOR ve her şeyi SIFIR okuyordu — puan kaybı SESSİZDİ.
+      Komiteden gelen gerçek C# şeması 14 alanın 11'inde farklı ad
+      kullanıyor.
+
+    ⛔ TİP DE ÖNEMLİ: `iha_mod` ve `iha_kilitlenme` C# tarafında **bool**.
+      0/1 göndermek `bool` alanına oturmaz.
+
+    ⛔ `iha_batarya` sunucu şemasında YORUMDA ("Avcı Drone yarışması
+      için" kapatılmış) — GÖNDERİLMEMELİ.
+    """
+    import inspect
+    import drone_yki
+
+    #: Komiteden gelen gerçek şema — ad ve tip.
+    SEMA = {
+        "takim_numarasi": int,
+        "iha_enlem": float, "iha_boylam": float, "iha_irtifa": float,
+        "iha_dikilme": float, "iha_yonelme": float, "iha_yatis": float,
+        "iha_hiz": float,
+        "iha_mod": bool, "iha_kilitlenme": bool,
+        "hedef_merkez_X": int, "hedef_merkez_Y": int,
+        "hedef_genislik": int, "hedef_yukseklik": int,
+    }
+
+    class _Cerceve:
+        hazir = True
+
+        @staticmethod
+        def dereceye(x, y, z):
+            return 41.1234567, 29.7654321, z
+
+    class _Gb:
+        cerceve = _Cerceve()
+
+        @staticmethod
+        def konum():
+            return 10.0, 20.0, 42.5
+
+        @staticmethod
+        def yonelim():
+            import math as _m
+            return _m.radians(-7.0), _m.radians(3.0), _m.radians(210.0)
+
+        @staticmethod
+        def hiz():
+            return 12.3
+
+    class _Ks:
+        durum = {"kaynak": "OTONOM"}
+
+    drone_yki.PANEL._D["son_kutu"] = (300, 230, 30, 43)
+    drone_yki.PANEL._D["olcut"] = {"saglandi": True}
+    paket = drone_yki._telemetri(_Gb(), _Ks(), None)
+
+    # --- ADLAR birebir ---
+    assert set(paket) == set(SEMA), (
+        "alan adları şemayla tutmuyor.\n  fazla: %s\n  eksik: %s"
+        % (sorted(set(paket) - set(SEMA)), sorted(set(SEMA) - set(paket))))
+
+    # --- TİPLER ---
+    for ad, tip in SEMA.items():
+        d = paket[ad]
+        if tip is bool:
+            assert isinstance(d, bool), (
+                "%s bool olmalı, gelen %r (%s). C# `bool` alanına 0/1 "
+                "oturmaz." % (ad, d, type(d).__name__))
+        elif tip is int:
+            assert isinstance(d, int) and not isinstance(d, bool), (
+                "%s int olmalı, gelen %r" % (ad, d))
+        else:
+            assert isinstance(d, (int, float)) and not isinstance(d, bool), (
+                "%s sayı olmalı, gelen %r" % (ad, d))
+
+    # --- DEĞERLER gerçekten araçtan mı geliyor (sabit sıfır DEĞİL) ---
+    assert abs(paket["iha_enlem"] - 41.1234567) < 1e-6
+    assert abs(paket["iha_boylam"] - 29.7654321) < 1e-6
+    assert abs(paket["iha_irtifa"] - 42.5) < 0.05
+    assert abs(paket["iha_yonelme"] - 210.0) < 0.5
+    assert abs(paket["iha_hiz"] - 12.3) < 0.05
+    assert paket["iha_mod"] is True, "otonomdayken mod False geldi"
+    assert paket["iha_kilitlenme"] is True
+    assert (paket["hedef_merkez_X"], paket["hedef_merkez_Y"],
+            paket["hedef_genislik"], paket["hedef_yukseklik"]) == (300, 230, 30, 43)
+
+    # --- batarya GÖNDERİLMEMELİ ---
+    assert "iha_batarya" not in paket, (
+        "iha_batarya sunucu şemasında yorumda — gönderilmemeli")
+
+    # --- PDF'in eski adları KALMAMIŞ olmalı ---
+    for eski in ("takim_no", "enlem", "boylam", "irtifa", "dikilme",
+                 "yonelme", "yatis", "hiz", "mod", "kilitlenme",
+                 "hedef_x_merkezi", "hedef_y_merkezi"):
+        assert eski not in paket, (
+            "PDF'in eski adı `%s` hâlâ gönderiliyor — sunucu bunu ATAR "
+            "ve alanı SIFIR okur" % eski)
+
+    # --- sınama araçları da aynı şemayı kullanmalı ---
+    kay = open(os.path.join(REEL, "araclar", "sunucu_testi.py"),
+               encoding="utf-8").read()
+    for ad in SEMA:
+        assert ad in kay, "sunucu_testi.py `%s` göndermiyor" % ad
+    sah = open(os.path.join(REEL, "araclar", "sahte_sunucu.py"),
+               encoding="utf-8").read()
+    for ad in SEMA:
+        assert ad in sah, "sahte_sunucu.py `%s` alanını denetlemiyor" % ad

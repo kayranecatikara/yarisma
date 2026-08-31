@@ -41,9 +41,11 @@ A = 6378137.0
 F = 1 / 298.257223563
 E2 = F * (2 - F)
 
-ALANLAR = ("takim_no", "enlem", "boylam", "irtifa", "dikilme", "yonelme",
-           "yatis", "hiz", "mod", "kilitlenme", "hedef_x_merkezi",
-           "hedef_y_merkezi", "hedef_genislik", "hedef_yukseklik")
+# ⛔ SUNUCUNUN GERÇEK ŞEMASI (komiteden gelen C# sınıfı), PDF'inki DEĞİL.
+ALANLAR = ("takim_numarasi", "iha_enlem", "iha_boylam", "iha_irtifa",
+           "iha_dikilme", "iha_yonelme", "iha_yatis", "iha_hiz",
+           "iha_mod", "iha_kilitlenme", "hedef_merkez_X", "hedef_merkez_Y",
+           "hedef_genislik", "hedef_yukseklik")
 
 
 class Hedef:

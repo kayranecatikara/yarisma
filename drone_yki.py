@@ -468,8 +468,42 @@ def _gorus(beyin, kare, t, kare_t, gorsel_acik):
 
 
 def _telemetri(gb, ks, beyin):
-    """Yarışma sunucusuna gönderilecek paket (haberleşme dokümanı §7.1)."""
-    from dow.ayarlar import Ayar
+    """Yarışma sunucusuna gönderilecek paket.
+
+    ⛔⛔ ALAN ADLARI **SUNUCUNUN GERÇEK ŞEMASINDAN** ALINDI — haberleşme
+    dokümanının PDF'inden DEĞİL. İkisi TUTMUYOR ve bu sessizce puan
+    kaybettiriyordu.
+
+    YAŞANDI (2026-08-31, saha testi): doküman §7.1'deki adlarla gönderdik,
+    sunucu HTTP 200 döndü, `hata 0` gördük ve "çalışıyor" sandık. Oysa
+    sunucu tanımadığı alanları ATIYOR ve her şeyi SIFIR okuyordu.
+    Komiteden gelen gerçek şema (C# sınıfı) 14 alanın 11'inde farklı ad
+    kullanıyor:
+
+        doküman (PDF)        SUNUCU (gerçek)
+        takim_no          -> takim_numarasi
+        enlem             -> iha_enlem
+        boylam            -> iha_boylam
+        irtifa            -> iha_irtifa
+        dikilme           -> iha_dikilme
+        yonelme           -> iha_yonelme
+        yatis             -> iha_yatis
+        hiz               -> iha_hiz
+        mod (0/1)         -> iha_mod          ⛔ TİP DE FARKLI: bool
+        kilitlenme (0/1)  -> iha_kilitlenme   ⛔ TİP DE FARKLI: bool
+        hedef_x_merkezi   -> hedef_merkez_X   (büyük X)
+        hedef_y_merkezi   -> hedef_merkez_Y   (büyük Y)
+        hedef_genislik    -> hedef_genislik   (aynı)
+        hedef_yukseklik   -> hedef_yukseklik  (aynı)
+
+    ⛔ `iha_batarya` sunucu şemasında YORUM SATIRINDA — "Avcı Drone
+      yarışması için" kapatılmış. GÖNDERMİYORUZ.
+
+    ⛔ `iha_mod` / `iha_kilitlenme` **bool**tur (true/false), 0/1 değil.
+      C# tarafı `bool` alanına 0/1 alamaz.
+
+    Bekçi R128 bu adları ve tipleri kilitliyor.
+    """
     x, y, z = gb.konum()
     r, p, yw = gb.yonelim()
     kutu = PANEL._D.get("son_kutu") or (0, 0, 0, 0)
@@ -477,19 +511,22 @@ def _telemetri(gb, ks, beyin):
     enlem, boylam, _ = (gb.cerceve.dereceye(x, y, z) if gb.cerceve.hazir
                         else (0.0, 0.0, 0.0))
     return {
-        "takim_no": SunucuCfg.TAKIM_NO,
-        "enlem": round(enlem, 7), "boylam": round(boylam, 7),
-        "irtifa": round(z, 1),
-        "dikilme": round(math.degrees(p), 1),
-        "yonelme": round(math.degrees(yw) % 360.0, 1),
-        "yatis": round(math.degrees(r), 1),
-        "hiz": round(gb.hiz(), 1),
-        # ⛔ mod: 1 = otonom. Hakem GERÇEKTE otonom komut mu gönderiyor,
-        #   onu söyler — panelde ne seçili olduğunu değil.
-        "mod": 1 if ks.durum.get("kaynak") == "OTONOM" else 0,
-        "kilitlenme": 1 if olcut.get("saglandi") else 0,
-        "hedef_x_merkezi": int(kutu[0]), "hedef_y_merkezi": int(kutu[1]),
-        "hedef_genislik": int(kutu[2]), "hedef_yukseklik": int(kutu[3]),
+        "takim_numarasi": SunucuCfg.TAKIM_NO,
+        "iha_enlem": round(enlem, 7),
+        "iha_boylam": round(boylam, 7),
+        "iha_irtifa": round(z, 1),
+        "iha_dikilme": round(math.degrees(p), 1),
+        "iha_yonelme": round(math.degrees(yw) % 360.0, 1),
+        "iha_yatis": round(math.degrees(r), 1),
+        "iha_hiz": round(gb.hiz(), 1),
+        # ⛔ mod: hakem GERÇEKTE otonom komut mu gönderiyor — panelde ne
+        #   seçili olduğunu değil. Yapmadığımız bir şeyi beyan etmeyiz.
+        "iha_mod": bool(ks.durum.get("kaynak") == "OTONOM"),
+        "iha_kilitlenme": bool(olcut.get("saglandi")),
+        "hedef_merkez_X": int(kutu[0]),
+        "hedef_merkez_Y": int(kutu[1]),
+        "hedef_genislik": int(kutu[2]),
+        "hedef_yukseklik": int(kutu[3]),
     }
 
 
