@@ -1159,9 +1159,21 @@ class _SahteTelemPort:
 
     def durus_bas(self):
         d = self.durum
+        # ⛔ AÇILAR (-π, π] SARILIR — GERÇEK UÇUŞ KARTI DA BÖYLE YAPAR.
+        #   CRSF duruş çerçevesi açıyı `radyan × 10000` olarak `>hhh` ile
+        #   paketler; tavan ±32767 yani ±3.2767 rad. Sahte araç yaw'ı
+        #   sarmadan biriktirince π'yi aşıyor ve `struct.error` atıyordu.
+        #   Bu bir SINAMA DÜZENEĞİ eksiğiydi, ürün hatası DEĞİL: biz duruş
+        #   çerçevesini OKURUZ, yazmayız.
+        import math as _m
+
+        def _sar(a):
+            return (float(a) + _m.pi) % (2 * _m.pi) - _m.pi
+
         self._kuyruk += C.cerceve(C.TIP_DURUS, _st.pack(
-            ">hhh", int(round(d["pitch"] * 10000)), int(round(d["roll"] * 10000)),
-            int(round(d["yaw"] * 10000))), C.ADRES_EL_KUMANDASI)
+            ">hhh", int(round(_sar(d["pitch"]) * 10000)),
+            int(round(_sar(d["roll"]) * 10000)),
+            int(round(_sar(d["yaw"]) * 10000))), C.ADRES_EL_KUMANDASI)
 
     def vario_bas(self):
         self._kuyruk += C.cerceve(C.TIP_VARIO, _st.pack(
@@ -1382,8 +1394,17 @@ def test_R47_UCTAN_UCA_beyin_gercek_baglantiyla_UCUYOR():
     assert coz.n_crc_hata == 0, "kendi ürettiğimiz çerçevede CRC hatası!"
 
     # --- (b) FAZ İLERLEDİ: kalkış tamamlandı, istasyona geçildi ---
-    assert "KALKIS" in fazlar and "ISTASYON" in fazlar, (
-        "faz ilerlemedi: %s" % sorted(set(fazlar)))
+    # ⛔ YARIŞMA DEPOSU: KALKIŞ FAZI YOK (`DOW_KALKIS_ALT` varsayılanı 0).
+    #   Gerçek işleyişte pilot aracı ELLE kaldırır, sonra OTONOM'a basar;
+    #   araç zaten havadadır. Kalkış fazı burada yalnız ZARARLI olurdu:
+    #   20 m'de OTONOM'a basınca araç hedefi kovalamak yerine tırmanmaya
+    #   çalışırdı. Bu yüzden faz İLK TİKTEN İTİBAREN ISTASYON olmalı.
+    #   (Deneme deposunda varsayılan 45 m'ydi ve KALKIS -> ISTASYON
+    #    ilerlemesi beklenirdi.)
+    assert "ISTASYON" in fazlar, "faz ISTASYON'a hiç gelmedi: %s" % sorted(set(fazlar))
+    assert "KALKIS" not in fazlar, (
+        "KALKIŞ fazı devrede — yarışmada araç elle kaldırılır, "
+        "OTONOM'a basınca HEMEN hedefe yönelmeli: %s" % sorted(set(fazlar)))
 
     # --- (c) §5.1 MEKANİZMA KAPISI: güdüm çıktısı porta ULAŞIYOR ---
     h = C.KanalHaritasi()
@@ -2875,7 +2896,7 @@ def test_R114_kabul_esikleri_ENV_ile_ayarlanabilir():
                    % (y, a))
 
 
-def test_R115_balikgoz_modeli_VARSAYILANDA_KAPALI_ve_dogru():
+def test_R115_balikgoz_modeli_VARSAYILANDA_ACIK_ve_dogru():
     """⛔ SİMDE OLMAYAN HATA SINIFI (30 Ağu 2026).
 
     Oyun motorları (UE5) PERSPEKTİF render eder — DoW kamerasında
@@ -2887,8 +2908,11 @@ def test_R115_balikgoz_modeli_VARSAYILANDA_KAPALI_ve_dogru():
          için 38°'ye varan fazla yaw komutu demektir.
       2. MENZİL — kutu boyutu kadraj konumuna göre değişir.
 
-    ⛔ VARSAYILAN `pinhole`: davranış BİT BİT eskisi. Model açılırsa
-      güdüm değişir; bu yüzden ölçümle açılır.
+    ⭐ YARIŞMA DEPOSU: VARSAYILAN `esuzaklik` (balıkgöz AÇIK).
+      Kalibrasyonla doğrulandı: FOV 125° köşegen, TILT 25°, mercek
+      BALIKGÖZ. Deneme deposunda varsayılan `pinhole`di (davranış sim ile
+      bit bit aynı kalsın diye) ve gerçek değerler `baslat.sh`ten gelirdi.
+      Burada tersine çevrildi: env verilmese bile DOĞRU mercekle uçar.
     """
     import subprocess
     ORT = dict(os.environ, DOW_OPTIK_W="640", DOW_OPTIK_H="480")
@@ -2902,12 +2926,18 @@ def test_R115_balikgoz_modeli_VARSAYILANDA_KAPALI_ve_dogru():
         assert c.returncode == 0, c.stderr[:400]
         return c.stdout.strip()
 
-    # --- varsayılan pinhole, düzeltme çarpanı TAM 1.0 ---
+    # --- varsayılan BALIKGÖZ, düzeltme çarpanı 1.0'dan FARKLI ---
     v = kos("from dow.gorus import kamera as K\n"
             "print(K.OPTIK_MODEL, K.olcek_duzeltme(K.CX+300, K.CY))")
     ad, carpan = v.split()
-    assert ad == "pinhole" and float(carpan) == 1.0, (
-        "varsayılan pinhole değil ya da düzeltme uygulanıyor: %s" % v)
+    assert ad == "esuzaklik", (
+        "YARIŞMA varsayılanı balıkgöz olmalı, `%s` geldi — env verilmezse "
+        "araç YANLIŞ mercek modeliyle uçar" % ad)
+    assert float(carpan) != 1.0, (
+        "balıkgöz açık ama düzeltme uygulanmıyor (çarpan %s)" % carpan)
+    # kadrajın TAM MERKEZİNDE düzeltme 1.0 olmalı — referans nokta orasıdır
+    m = kos("from dow.gorus import kamera as K\nprint(K.olcek_duzeltme(K.CX, K.CY))")
+    assert abs(float(m) - 1.0) < 1e-6, "merkezde düzeltme 1.0 değil: %s" % m
 
     # --- eşuzaklık: ters çözüm KESİN olmalı ---
     v = kos("import math\nfrom dow.gorus import kamera as K\n"
@@ -3616,3 +3646,72 @@ def test_R123_YARISMADA_UDP_hedef_dinleyicisi_KAPALI():
     assert '--sunucu' in shk and '$DOW_SUNUCU' in shk, (
         "baslat.sh yarışma kipinde --sunucu geçirmiyor")
     assert "--deneme" in shk, "deneme kipi (UDP'li) kaldırılmış"
+
+
+# ---------------------------------------------------------------- R124
+def test_R124_VARSAYILANLAR_GERCEK_ARAC_env_verilmese_de_dogru_ucar():
+    """⛔⛔ YARIŞMA DEPOSUNDA VARSAYILANLAR GERÇEK ARAÇTIR, SİM DEĞİL.
+
+    Deneme deposunda varsayılanlar simülasyonu birebir tekrarlasın diye
+    SİM değerleriydi; gerçek değerler `baslat.sh`ten gelirdi. Yarışmada
+    bu TERSİNE ÇEVRİLDİ.
+
+    ⛔ NİYE: biri `baslat.sh` olmadan `python3 drone_yki.py` çalıştırırsa
+      araç YANLIŞ MODELLE uçardı. YAŞANDI (taşınabilirlik sınamasında):
+        DEDEKTÖR : ⛔ yüklenemedi (talon_v3.pt yok) — görsel KAPALI
+        ÇEVİRİCİ : MODEL=dogru  Y_ISARET=-1.0
+      `Y_ISARET=-1.0` yanal kanalı AYNALAR: araç hedefe gitmesi gerekirken
+      HEDEFTEN KAÇAR. Ve dedektör sessizce kapanır — tek satır uyarıyla.
+
+    ⛔ Bu bekçi ENV YOKKEN sınar: her `DOW_*` değişkeni temizlenir.
+    """
+    import subprocess
+    ort = {k: v for k, v in os.environ.items() if not k.startswith("DOW_")}
+    ort["PYTHONPATH"] = KOK
+
+    def kos(kod):
+        c = subprocess.run([sys.executable, "-c", kod], cwd=KOK,
+                           env=ort, capture_output=True, text=True)
+        assert c.returncode == 0, c.stderr[-500:]
+        return c.stdout.strip()
+
+    # --- araç modeli: Angle + ÖLÇÜLMÜŞ yanal işaret ---
+    v = kos("from dow.gudum.cevirici import CevCfg as C\n"
+            "print(C.MODEL, C.Y_ISARET, C.MAX_YATIS_DEG)")
+    model, y_isaret, aci_max = v.split()
+    assert model == "aci", (
+        "çevirici varsayılanı `%s` — gerçek araç Angle modunda uçuyor" % model)
+    assert float(y_isaret) > 0, (
+        "Y_ISARET=%s — yanal kanal AYNALANMIŞ, araç hedeften KAÇAR. "
+        "Yerde ölçüldü (2026-08-31): +1.0 doğru." % y_isaret)
+    assert float(aci_max) == 60.0, "ACI_MAX Betaflight angle_limit'iyle uyuşmuyor"
+
+    # --- dedektör: yarışma modeli VE dosyası GERÇEKTEN var ---
+    v = kos("from dow.gorus import dedektor as D\nprint(D.MODEL_YOLU)")
+    assert v.endswith("tayarti_v1.pt"), (
+        "varsayılan model `%s` — yarışma modeli tayarti_v1" % v)
+    assert os.path.exists(v), (
+        "model dosyası YOK: %s — dedektör sessizce kapanır, görsel güdüm "
+        "hiç çalışmaz" % v)
+
+    # --- optik: balıkgöz ---
+    v = kos("from dow.gorus import kamera as K\nprint(K.OPTIK_MODEL)")
+    assert v == "esuzaklik", "mercek varsayılanı balıkgöz değil: %s" % v
+
+    # --- kalkış fazı KAPALI (pilot elle kaldırır) ---
+    v = kos("from dow.ayarlar import Ayar\nprint(Ayar.KALKIS_ALT_M)")
+    assert float(v) == 0.0, (
+        "KALKIS_ALT=%s — OTONOM'a basınca araç hedefi kovalamak yerine "
+        "tırmanmaya çalışır" % v)
+
+    # --- GNSS süzgeci AÇIK (hedef GPS'i bozuk geliyor) ---
+    v = kos("from gercek.gnss_filtre import SuzgecCfg as S\nprint(S.ACIK)")
+    assert v == "True", (
+        "GNSS süzgeci varsayılanda KAPALI — bozuk hedef GPS'i ham geçer")
+
+    # --- baslat.sh yine de hepsini AÇIKÇA yazmalı (çifte güvence) ---
+    sh = open(os.path.join(REEL, "baslat.sh"), encoding="utf-8").read()
+    for anahtar in ("DOW_CEV_MODEL", "DOW_CEV_Y_ISARET", "DOW_MODEL",
+                    "DOW_OPTIK_MODEL", "DOW_KALKIS_ALT", "DOW_GNSS_FILTRE",
+                    "DOW_SUNUCU", "DOW_TAKIM_NO"):
+        assert anahtar in sh, "baslat.sh %s yazmıyor" % anahtar

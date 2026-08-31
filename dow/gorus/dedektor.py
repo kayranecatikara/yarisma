@@ -108,7 +108,7 @@ _DOW_KOK = os.path.dirname(os.path.dirname(os.path.dirname(
 
 
 def _model_yolu():
-    ad = os.environ.get("DOW_MODEL", "talon_v3")
+    ad = os.environ.get("DOW_MODEL", "tayarti_v1")   # ⭐ YARIŞMA modeli
     acik = os.environ.get("DOW_MODEL_YOL")        # tam yol vermek isteyene
     if acik:
         return acik

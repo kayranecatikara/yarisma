@@ -114,7 +114,7 @@ class Ayar:
     PANEL_KUTU_YAS_S = _f("DOW_PANEL_KUTU_YAS_S", 0.3)
 
     # ================= KALKIŞ =================
-    KALKIS_ALT_M   = _f("DOW_KALKIS_ALT", 45.0)   # zemine göreli
+    KALKIS_ALT_M   = _f("DOW_KALKIS_ALT", 0.0)   # zemine göreli
     KALKIS_VZ      = _f("DOW_KALKIS_VZ", 12.0)
     KALKIS_TOL_M   = 3.0
 

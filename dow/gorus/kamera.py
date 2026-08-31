@@ -141,7 +141,7 @@ VFOV_DEG = 2*math.degrees(math.atan(CY/F_PX))
 #  ⛔ VARSAYILAN `pinhole` — hiçbir DOW_OPTIK_MODEL verilmezse davranış
 #     BİREBİR eskisidir; `araclar/denklik.py` bunu doğrular.
 # ============================================================================
-OPTIK_MODEL = os.environ.get("DOW_OPTIK_MODEL", "pinhole").strip().lower()
+OPTIK_MODEL = os.environ.get("DOW_OPTIK_MODEL", "esuzaklik").strip().lower()
 if OPTIK_MODEL not in ("pinhole", "esuzaklik", "opencv"):
     raise ValueError("DOW_OPTIK_MODEL='%s' — pinhole | esuzaklik | opencv"
                      % OPTIK_MODEL)

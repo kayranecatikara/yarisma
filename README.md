@@ -89,17 +89,16 @@ ls -l /dev/serial/by-id/ ; ls /dev/video* ; ls /dev/input/js*
 `baslat.sh` içinde hazır:
 
 ```bash
-export DOW_SUNUCU="http://10.0.0.1:5000"   # ⚠ PORT teyit edilmedi
+export DOW_SUNUCU="http://10.0.0.10:10001"   # ⭐ hakemlerin kesin adresi
 export DOW_SUNUCU_KADI="hamidiye"
 export DOW_SUNUCU_SIFRE="Z8vN1cR5tY"
-export DOW_TAKIM_NO="0"                    # ⚠ hakemler numara bildirmedi
+export DOW_TAKIM_NO="2"                      # ⭐ hakemlerin verdiği numara
 ```
 
-**Sahada hakemden öğren:**
-1. **Port** — 5000 varsayıldı, bağlantı hatası alırsan ilk şüpheli bu
-2. **Takım numarası** — bildirilmediyse 0 kalabilir; sunucu testi paketi
-   kabul ediyorsa sorun yoktur
-3. **Kilitlenme uç adresi** — aşağıdaki açık soruya bak
+Adres, port ve takım numarası **kesinleşti**; dokunman gereken bir şey yok.
+
+**Sahada hakemden teyit edilecek tek şey:** kilitlenme uç adresi
+(aşağıdaki açık soruya bak).
 
 ## 1.2 · Sunucuyu sına — ⭐ uçmadan önce
 
@@ -150,7 +149,7 @@ cd ~/projects/yarisma
 
 Açılışta **gözünle doğrula**:
 ```
-SUNUCU  : http://10.0.0.1:5000   takım 0   kadı hamidiye
+SUNUCU  : http://10.0.0.10:10001   takım 2   kadı hamidiye
 GÖNDERİM: 1.8 Hz  (⛔ doküman sınırı 2 Hz)
 GNSS    : süzgeç AÇIK  R=200 cm  dt=0.55 s
 HEDEF   : YALNIZ yarışma sunucusu yanıtı (UDP kapalı)
@@ -331,8 +330,7 @@ küçüktür** → 200 → 400 → 800 diye yükselt.
 | Alçalma hızı ölçülmedi | `DOW_INIS_CUBUK=-0.35` başlangıç; ölç, ayarla |
 | `MENZIL_C` türetme | yalnız **görsel** fazı etkiler, GPS fazını değil |
 | Kilitlenme uç adresi | doküman §4'te yok — **hakemden teyit** |
-| Sunucu portu | 5000 varsayıldı — **hakemden teyit** |
-| Takım numarası | bildirilmedi — sunucu testi kabul ediyorsa sorun yok |
+| Sunucu adresi/port/takım no | ✔ kesinleşti: `10.0.0.10:10001`, takım **2** |
 
 ---
 
@@ -346,7 +344,7 @@ python3 gercek/tespit_izle.py            # dedektör güveni, canlı
 python3 gercek/cubuk_izle.py             # güdümün istediği yön, canlı
 python3 gercek/yon_testi.py --mod cevir  # yön işareti (yerde, pervanesiz)
 python3 gercek/menzil_olc.py --mesafe 10 # MENZIL_C ölç
-python3 -m pytest tests/ -q              # 101 bekçi
+python3 -m pytest tests/ -q              # 102 bekçi
 ```
 
 # 9 · YAPI
@@ -368,10 +366,53 @@ yarisma/
 ├── dow/                     güdüm çekirdeği (GPS + görsel + çevirici)
 ├── skydagger/               ELRS backend
 ├── modeller/tayarti_v1.pt   YOLO — gerçek görüntüyle eğitildi
-└── tests/                   101 bekçi
+└── tests/                   102 bekçi
 ```
 
-# 10 · KURULUM (yeni makinede)
+# 10 · TAŞINABİLİRLİK
+
+Depo **nereye kopyalanırsa kopyalansın** çalışır — sabit mutlak yol yoktur.
+
+| ne | nasıl çözülür |
+|---|---|
+| `baslat.sh` | `cd "$(dirname "$0")"` — betiğin kendi yeri |
+| `PYTHONPATH` | betikte deponun kendi kökü olarak kurulur |
+| YOLO modeli | `dow/gorus/dedektor.py` içinde `__file__`'dan türetilir |
+| Testler | `KOK == REEL` — `dow/` depo içinde |
+
+Doğrulandı: depo rastgele bir dizine kopyalanıp **102 bekçi geçti** ve
+uygulama açıldı.
+
+### ⭐ Varsayılanlar GERÇEK ARAÇ — env verilmese bile doğru uçar
+
+Deneme deposunda varsayılanlar simülasyonu tekrarlasın diye **sim**
+değerleriydi; gerçek değerler `baslat.sh`ten gelirdi. **Yarışmada tersine
+çevrildi**, çünkü biri `baslat.sh` olmadan çalıştırırsa şu oluyordu:
+
+```
+DEDEKTÖR : ⛔ yüklenemedi (talon_v3.pt yok) — görsel KAPALI
+ÇEVİRİCİ : MODEL=dogru  Y_ISARET=-1.0        ← araç hedeften KAÇAR
+```
+
+Artık env olmadan da:
+```
+DEDEKTÖR : yüklendi
+ÇEVİRİCİ : MODEL=aci  ACI_MAX=60  Y_ISARET=+1.0
+```
+
+| ayar | yarışma varsayılanı |
+|---|---|
+| `DOW_CEV_MODEL` | `aci` (Angle modu) |
+| `DOW_CEV_Y_ISARET` | `+1.0` — yerde kanıtlandı |
+| `DOW_MODEL` | `tayarti_v1` |
+| `DOW_OPTIK_MODEL` | `esuzaklik` (balıkgöz) |
+| `DOW_KALKIS_ALT` | `0` (pilot elle kaldırır) |
+| `DOW_GNSS_FILTRE` | `1` (açık) |
+
+`baslat.sh` yine hepsini açıkça yazar — **çifte güvence**. Bekçi **R124**
+env'i tamamen temizleyip bu varsayılanları sınar.
+
+# 11 · KURULUM (yeni makinede)
 
 ```bash
 git clone https://github.com/kayranecatikara/yarisma ~/projects/yarisma

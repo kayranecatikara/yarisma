@@ -82,7 +82,15 @@ class CevCfg:
     #     sözleşmesi: +roll sağa yatırır, araç sağa gider). AMA "muhtemelen"
     #     UÇURULMAZ: `reel/araclar/isaret_olc.py` ölçer, sonuç buraya
     #     DOW_CEV_Y_ISARET ile verilir. Ölçülmeden otonom uçuş AÇILMAZ.
-    Y_ISARET = _f("DOW_CEV_Y_ISARET", -1.0)   # DoW'da ölçüldü: +roll SOLA
+    # ⛔⛔ YARIŞMA DEPOSU: VARSAYILANLAR GERÇEK ARAÇTIR, SİM DEĞİL.
+    #   Deneme deposunda varsayılanlar simülasyonu birebir tekrarlasın diye
+    #   sim değerleriydi ve gerçek değerler `baslat.sh`ten geliyordu.
+    #   YARIŞMADA BU TERSİNE ÇEVRİLDİ: biri `baslat.sh` olmadan
+    #   `python3 drone_yki.py` çalıştırırsa araç YANLIŞ MODELLE uçardı —
+    #   Y_ISARET=-1.0 yanal kanalı AYNALAR ve araç hedeften KAÇAR.
+    #   Artık env verilmese bile doğru davranır. `baslat.sh` yine hepsini
+    #   açıkça yazar (çifte güvence). Bekçi R124.
+    Y_ISARET = _f("DOW_CEV_Y_ISARET", +1.0)   # ⭐ YARIŞMA: gerçek araç   # DoW'da ölçüldü: +roll SOLA
 
     # --- [2] YATAY İÇ DÖNGÜ ---
     # a_istenen = K_V * (v_hedef - v_olculen)
@@ -104,7 +112,7 @@ class CevCfg:
     #     34 m/s² veriyordu, fizik 17.0 der (TAM İKİ KAT).
     #     Ölçülen kartta angle_limit = 60 -> gerçek tavan 17.0 m/s².
     #     Geçiş: DOW_CEV_MODEL=aci  DOW_CEV_ACI_MAX=60
-    MODEL = _s("DOW_CEV_MODEL", "dogru")
+    MODEL = _s("DOW_CEV_MODEL", "aci")        # ⭐ YARIŞMA: Angle modu
     A_MAX = _f("DOW_CEV_A_MAX", 34.0)      # m/s²; "dogru" modelde tam çubuk
     MAX_YATIS_DEG = _f("DOW_CEV_ACI_MAX", 60.0)  # "aci" modelinde tam çubuk açısı
 

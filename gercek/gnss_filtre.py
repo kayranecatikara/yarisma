@@ -249,7 +249,7 @@ def _f(ad, varsayilan):
 
 class SuzgecCfg:
     #: Kill-switch. 0 -> ham konum aynen döner (bit bit eski davranış).
-    ACIK = os.environ.get("DOW_GNSS_FILTRE", "0") not in ("0", "", "kapali")
+    ACIK = os.environ.get("DOW_GNSS_FILTRE", "1") not in ("0", "", "kapali")
     #: GPS gecikmesi telafisi (s). Çıktı bu kadar İLERİ taşınır.
     TELAFI_SN = _f("DOW_GNSS_TELAFI", 1.0)
     #: Beklenen paket aralığı (s). Sunucu 1.5 Hz ise ~0.67, 5 Hz ise 0.2.
