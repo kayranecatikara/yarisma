@@ -45,6 +45,7 @@ from gercek.elrs import ElrsBag                         # noqa: E402
 from gercek.hedef import HedefKaynagi, UdpDinleyici     # noqa: E402
 from gercek.kayit import Kayitci                       # noqa: E402
 from gercek.rtl import Rtl                             # noqa: E402
+from gercek.video_kayit import VideoKaydi              # noqa: E402
 from gercek.dikey_inis import DikeyInis                # noqa: E402
 from gercek.kamera_yakala import Kamera, KameraCfg      # noqa: E402
 from gercek.komut import KomutSureci                    # noqa: E402
@@ -177,11 +178,8 @@ def main():
     #   `UdpDinleyici` 0.0.0.0:47800'ü dinler; ağdaki HERHANGİ bir makine
     #   oraya hedef paketi yollayabilir ve SON GELEN PAKET KAZANIR.
     #   Bu YAŞANDI (2026-08-30): ağdaki ikinci bir yayıncı yüzünden panel
-    #   gerçek hedef yerine başka bir konumu gösterdi.
-    #   ⛔ Yarışma alanında ORTAK BİR YEREL AĞA bağlanıyoruz (doküman §2);
-    #     orada başka bir takımın yayını hedefimizi kaydırabilir.
-    #   Bu yüzden UDP YALNIZ `--deneme` kipinde açılır; yarışmada hedef
-    #   YALNIZCA sunucu yanıtından gelir.
+    #   gerçek hedef yerine başka bir konumu gösterdi. Yarışma alanında
+    #   ORTAK YEREL AĞA bağlanıyoruz (doküman §2). Bekçi R123.
     udp = None
     if a.sunucu:
         print("  HEDEF     : YALNIZ yarışma sunucusu yanıtı (UDP kapalı)")
@@ -301,6 +299,10 @@ def main():
     PANEL._D["rtl"] = rtl
     inis = DikeyInis()
     PANEL._D["inis"] = inis
+    # ⛔ Video kaydı kendi iş parçacığında koşar ve kareyi kameradan KENDİ
+    #   çeker; güdüm döngüsünü bekletmez.
+    vkayit = VideoKaydi(kam)
+    PANEL._D["video"] = vkayit
     print("  RTL       : hazır (irtifa %.0f m, hız %.0f m/s)"
           % (rtl.cfg.IRTIFA_M, rtl.cfg.HIZ_MS))
 

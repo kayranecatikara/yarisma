@@ -73,7 +73,19 @@ export DOW_GPS_KAYNAK=gercek
 export DOW_CEV_Y_ISARET="${DOW_CEV_Y_ISARET:-+1.0}"
 # ⛔ KALKIŞ FAZI KAPALI: pilot aracı ELLE kaldırır, sonra OTONOM'a basar.
 #   Açık olsaydı araç hedefi kovalamak yerine 45 m'ye tırmanmaya çalışırdı.
-export DOW_KALKIS_ALT="${DOW_KALKIS_ALT:-0}"
+# ⭐ OTONOM KALKIŞ AÇIK (kullanıcı kararı 2026-08-31): araç ARM edildikten
+#   sonra GÖREVİ BAŞLAT'a basılınca KALKIS fazında dikey tırmanır (yatay
+#   komut YOK), hedef irtifaya varınca ISTASYON'a geçip hedefe yönelir.
+export DOW_KALKIS_ALT="${DOW_KALKIS_ALT:-40}"
+# ⛔⛔ TIRMANMA HIZI 12 -> 3 m/s. Dikey kapalı döngü (`dikey.py`) HİÇ
+#   UÇMADI (panelde ölçüldü: aktif=false, 3470 pasif çağrı). 12 m/s ile
+#   döngü salınırsa araç yerden fırlar ya da çakılır. 3 m/s'de 40 metreye
+#   ~13 s'de çıkar, her an müdahale edilebilir.
+export DOW_KALKIS_VZ="${DOW_KALKIS_VZ:-3.0}"
+
+# ---- VİDEO KAYDI ----------------------------------------------------------
+# ⛔ Kilitlenmeler kaydedilen videoyla inceleniyor (doküman §8).
+export DOW_VIDEO_FPS="${DOW_VIDEO_FPS:-12}"
 
 # ==============================================================================
 # 4 · DEDEKTÖR  (gerçek görüntüyle eğitildi)

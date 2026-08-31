@@ -114,8 +114,29 @@ class Ayar:
     PANEL_KUTU_YAS_S = _f("DOW_PANEL_KUTU_YAS_S", 0.3)
 
     # ================= KALKIŞ =================
-    KALKIS_ALT_M   = _f("DOW_KALKIS_ALT", 0.0)   # zemine göreli
-    KALKIS_VZ      = _f("DOW_KALKIS_VZ", 12.0)
+    # ⭐ YARIŞMA VARSAYILANI: otonom kalkış AÇIK (40 m). Deneme deposunda
+    #   45 m'ydi (sim mirası). Araç arm edildikten sonra OTONOM'a
+    #   geçilince kendi tırmanır. Bkz. R124.
+    KALKIS_ALT_M   = _f("DOW_KALKIS_ALT", 40.0)
+    #: ⛔⛔ GÖRSEL GÜDÜME DEVİR İZNİ (kullanıcı isteği 2026-08-31).
+    #   True (varsayılan): eski davranış — tespit süreklilik şartını
+    #     sağlayınca güdüm KENDİLİĞİNDEN görsele devreder.
+    #   False: dedektör çalışmaya ve kutu çizmeye DEVAM EDER, kilit
+    #     sayacı da işler; ama araç GPS fazında KALIR. Operatör panelden
+    #     izin verene kadar devir olmaz.
+    #
+    #   NİYE: ilk otonom uçuşta önce YALNIZ GPS güdümünü görmek istiyoruz.
+    #     Görselin ne zaman devralacağına insan karar versin.
+    #
+    #   ⛔⛔ YARIŞMADA AÇIK OLMALI. Şartname "görsel temas varken GPS
+    #     güdümü YASAK, yalnız bbox" diyor (CLAUDE.md §10). Görseli
+    #     kilitleyip GPS'te kalmak PUANLI KOŞUDA KURAL İHLALİDİR.
+    #     Bu kapı yalnız DENEME uçuşları içindir.
+    GORSEL_IZIN = _b("DOW_GORSEL_IZIN", True)   # zemine göreli
+    # ⛔ YARIŞMA VARSAYILANI 3 m/s (sim mirası 12'ydi). Dikey kapalı döngü
+    #   HİÇ UÇMADI; 12 m/s ile ilk denemede salınırsa araç yerden fırlar
+    #   ya da çakılır. 3 m/s'de 40 m'ye ~13 s'de çıkar, müdahale edilebilir.
+    KALKIS_VZ      = _f("DOW_KALKIS_VZ", 3.0)
     KALKIS_TOL_M   = 3.0
 
     # ================= İSTASYON (GPS fazının HEDEFİ) =================

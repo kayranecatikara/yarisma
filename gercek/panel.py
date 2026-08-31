@@ -200,6 +200,14 @@ def _durum():
         d["oto_cubuk"] = ks.otonom_istek
     if gb is not None and getattr(gb, "gnss_suzgec", None) is not None:
         d["gnss"] = gb.gnss_suzgec.durum()
+    try:
+        from dow.ayarlar import Ayar as _Ay
+        d["gorsel_izin"] = bool(getattr(_Ay, "GORSEL_IZIN", True))
+    except Exception:
+        d["gorsel_izin"] = True
+    _vk = _D.get("video")
+    if _vk is not None:
+        d["video"] = _vk.durum()
     _in = _D.get("inis")
     if _in is not None:
         d["inis"] = _in.durum()
@@ -356,6 +364,25 @@ button.kucukacil{background:#3f1414;border-color:#7f1d1d;color:#fca5a5;
   font-size:10px;padding:5px;width:100%;letter-spacing:0}
 button.kucukacil:hover{background:#5b1a1a}
 button.kucukacil.aktif{background:#7f1d1d;color:#fff;border-color:#ef4444}
+/* görsel güdüm izni — mor: ne acil (kırmızı) ne normal (mavi) */
+button.video{background:#312e81;border-color:#818cf8;color:#e0e7ff;
+  font-weight:600;padding:9px;width:100%}
+button.video:hover{background:#3730a3}
+button.video.kayitta{background:#7f1d1d;border-color:#f87171;color:#fee2e2;
+  animation:videoyanip 1.4s steps(2,end) infinite}
+@keyframes videoyanip{50%{background:#991b1b}}
+button.gorev{background:#065f46;border-color:#34d399;color:#d1fae5;
+  font-weight:700;padding:13px;width:100%;font-size:14px;letter-spacing:.4px}
+button.gorev:hover{background:#047857}
+button.gorev.aktif{background:#064e3b;border-color:#6ee7b7}
+button.gorev:disabled{background:#1f2937;border-color:#374151;color:#6b7280;
+  cursor:not-allowed}
+button.gorsel{background:#4c1d95;border-color:#a78bfa;color:#ede9fe;
+  font-weight:700;padding:10px;width:100%}
+button.gorsel:hover{background:#5b21b6}
+button.gorsel.acik{background:#065f46;border-color:#34d399;color:#d1fae5}
+button.gorsel.bekliyor{animation:gorselyanip 1s steps(2,end) infinite}
+@keyframes gorselyanip{50%{background:#7c3aed;border-color:#c4b5fd}}
 button.acil{background:#b91c1c;border-color:#fca5a5;color:#fff;
   font-weight:700;letter-spacing:.5px;padding:12px;width:100%;font-size:14px}
 button.acil:hover{background:#dc2626}
@@ -404,12 +431,21 @@ button.armli{background:#166534;border-color:#4ade80}
         <button id=b_rtl class=rtl>RTL — EVE DÖN</button>
         <button id=b_arm class=arm>ARM (BASILI TUT)</button>
       </div>
+      <div class=dugmeler style="margin-top:8px">
+        <button id=b_gorev class=gorev>🚀 GÖREVİ BAŞLAT (OTONOM KALKIŞ)</button>
+      </div>
+      <div class=dugmeler style="margin-top:6px">
+        <button id=b_gorsel class=gorsel>GÖRSEL GÜDÜM</button>
+      </div>
       <div class=dugmeler style="margin-top:6px">
         <button id=b_inis class=acil>⛔ FAILSAFE — DİKEY İNİŞ</button>
       </div>
       <div class=dugmeler style="margin-top:2px">
         <button id=b_kes class=kucukacil>son çare: RC paketini kes
           (kartın kendi AUTO-LAND'i)</button>
+      </div>
+      <div class=dugmeler style="margin-top:6px">
+        <button id=b_video class=video>⏺ VİDEO KAYDI BAŞLAT</button>
       </div>
       <div class=dugmeler>
         <button id=b_koken>KÖKEN KUR</button>
@@ -469,6 +505,19 @@ let S={thr:0,yaw:0,pitch:0,roll:0,arm:false,izin:false};
 let kumandaVar=false, armBasili=false, kmdYokSay=false;
 // ⛔ PANEL BEKÇİSİ: POST'lar gerçekten gidiyor mu? Donma SESSİZ olmamalı —
 //   operatör "arayüz dondu mu, kumanda mı devraldı" diye tahmin etmemeli.
+// ⛔⛔ `post` — PANELDEKİ TÜM DÜĞMELERİN ORTAK YOLU.
+//   YAŞANDI (2026-08-31, sahada): RTL, dikey iniş, paket kes, görsel izin
+//   ve görevi başlat düğmelerinin hepsi `post(...)` çağırıyordu ama bu
+//   fonksiyon HİÇ TANIMLI DEĞİLDİ. Tarayıcı "post is not defined" atıyor,
+//   düğme sessizce hiçbir şey yapmıyordu. Failsafe'i Python'dan doğrudan
+//   HTTP ile sınadığım için testlerde görünmedi — düğme yolu HİÇ
+//   denenmemişti. Bekçi R126 artık bunu kilitliyor.
+//   `function` ile tanımlı (hoisting): yukarıdaki handler'lar da görsün.
+async function post(yol, govde){
+  const y = await fetch(yol, {method:"POST",
+                             body: JSON.stringify(govde||{})});
+  try{ return await y.json(); }catch(_){ return {ok: y.ok ? 1 : 0}; }
+}
 let sonBasarili=Date.now(), ucusta=0, postHata=0;
 // ⛔ SEKME GÖRÜNÜRLÜK KONTROLÜ KALDIRILDI (kullanıcı kararı 2026-08-29):
 //   "sekme arka plana düşünce o zamanlayıcıyı kısmayı falan kaldır, o
@@ -527,6 +576,45 @@ const yerR=pad(document.getElementById("padR"),document.getElementById("topuzR")
 
 document.getElementById("b_manuel").onclick=()=>kip("MANUEL");
 document.getElementById("b_otonom").onclick=()=>kip("OTONOM");
+// ⏺ VİDEO KAYDI — FPV görüntüsünü dosyaya yazar.
+//   Yarışma kilitlenmeleri kaydedilen videolarla inceliyor (doküman §8);
+//   uçuş sonrası analizde de görüntü ile log birbirini doğrular.
+document.getElementById("b_video").onclick=async()=>{
+  const kayitta=document.getElementById("b_video").classList.contains("kayitta");
+  const r=await post("/api/video",{ac:!kayitta});
+  if(!r.ok) alert("video kaydı: "+(r.sebep||"başlatılamadı"));
+};
+// 🚀 GÖREVİ BAŞLAT — otonom kalkış + takip.
+//   ⛔ ARM'ı BU DÜĞME YAPMAZ. Arm daima insandan gelir (bekçi R35);
+//     güdümün arm kanalına erişimi YOKTUR ki bir yazılım hatası aracı
+//     arm edemesin. Uçuş için arm KUMANDANIN anahtarından gelir —
+//     paneldeki ARM basılı tutma ister, uçuş boyunca tutulamaz.
+document.getElementById("b_gorev").onclick=async()=>{
+  const d=window._sonDurum||{};
+  const k=d.komut||{};
+  if(!k.arm){
+    alert("⛔ ARAÇ ARM DEĞİL.\n\nÖnce KUMANDANIN arm anahtarını aç "+
+          "(panel düğmesi basılı tutma ister, uçuşta kullanılmaz).");
+    return;
+  }
+  if(!confirm("🚀 GÖREVİ BAŞLAT\n\nAraç KENDİ KALKACAK:\n"+
+              "  · dikey tırmanış 3 m/s ile 40 m'ye\n"+
+              "  · sonra hedefe yönelip GPS ile takip\n\n"+
+              "⛔ Pervanelerin takılı ve alanın boş olduğunu doğrula.\n"+
+              "⛔ Kumanda elinde olsun — çubuğa dokunmak otonomu keser.\n\n"+
+              "Başlasın mı?")) return;
+  await post("/api/kip",{kip:"OTONOM"});
+};
+// ⛔ GÖRSEL GÜDÜM İZNİ — kapalıyken dedektör ÇALIŞIR ve kutu ÇİZİLİR,
+//   ama araç GPS fazında KALIR. Devir yalnız operatör izin verince olur.
+//   ⛔ YARIŞMADA AÇIK OLMALI (şartname §10: görsel temas varken GPS yasak).
+document.getElementById("b_gorsel").onclick=async()=>{
+  const acik=document.getElementById("b_gorsel").classList.contains("acik");
+  if(!acik && !confirm("GÖRSEL GÜDÜME İZİN VERİLSİN Mİ?\n\n"+
+      "Araç GPS fazından çıkıp hedefi KAMERADAN takip etmeye başlar.\n"+
+      "Bundan sonra hedefin GPS'ine BAKMAZ.\n\nDevam?")) return;
+  await post("/api/gorsel_izin",{ac:!acik});
+};
 // ⛔⛔ FAILSAFE = DİKEY İNİŞ (kullanıcı kararı 2026-08-31).
 //   Nerede olursak olalım — güdüm sürerken de, pilot elle uçarken de —
 //   bu düğme görevi keser ve uçuş kartının ALT HOLD + POS HOLD kipleriyle
@@ -866,6 +954,41 @@ function gosterim(d){
   rozet("r_arm",  !!k.arm, k.arm?"ARM":"DISARM");
   // ⛔ İNİŞ KİLİDİ — panelde SESSİZ kalamaz: operatör niye komut
   //   gitmediğini görmeden anlayamaz.
+  // ---- VİDEO KAYDI ----
+  const vd = d.video||{};
+  const bV=document.getElementById("b_video");
+  bV.classList.toggle("kayitta", vd.aktif===true);
+  bV.textContent = vd.aktif
+    ? ("⏺ KAYITTA — "+(vd.sure_s??0)+" s · "+(vd.kare??0)+" kare · "+
+       (vd.mb??0)+" MB  (durdurmak için bas)")
+    : (vd.kare ? ("⏺ VİDEO KAYDI BAŞLAT   (son: "+(vd.yol||"")+")")
+               : "⏺ VİDEO KAYDI BAŞLAT");
+  // ---- GÖREVİ BAŞLAT ----
+  window._sonDurum = d;
+  const bGv=document.getElementById("b_gorev");
+  const otonomda = (k.kaynak=="OTONOM");
+  bGv.classList.toggle("aktif", otonomda);
+  bGv.disabled = !k.arm && !otonomda;
+  // ⚠ `g` ve `ko` AŞAĞIDA `const` ile tanımlanıyor — burada kullanmak
+  //   "Cannot access before initialization" atıyordu (yaşandı, panel
+  //   komple çöktü). Doğrudan `d`den okuyoruz.
+  const _g0 = d.gudum||{}, _ko0 = d.konum||{};
+  bGv.textContent = otonomda
+    ? ("🚀 GÖREV SÜRÜYOR — " + (_g0.durum||"?") +
+       (_g0.durum=="KALKIS" ? ("  tırmanıyor " + (_ko0.yukari??0) + " m") : ""))
+    : (k.arm ? "🚀 GÖREVİ BAŞLAT (OTONOM KALKIŞ)"
+             : "🚀 GÖREVİ BAŞLAT — önce ARM et");
+  // ---- GÖRSEL GÜDÜM İZNİ ----
+  const gi = (d.gorsel_izin===true);
+  const kl2 = d.kilit||{};
+  const hazir = (kl2.kilit_s||0) > 0.3;      // dedektör hedefi tutuyor
+  const bG=document.getElementById("b_gorsel");
+  bG.classList.toggle("acik", gi);
+  bG.classList.toggle("bekliyor", !gi && hazir);
+  bG.textContent = gi
+    ? ("GÖRSEL GÜDÜM: AÇIK"+((d.gudum||{}).durum=="GORSEL"?"  ·  DEVREDE":"")+"  (kapatmak için bas)")
+    : (hazir ? "⚡ GÖRSEL HAZIR — İZİN VER (bas)"
+             : "GÖRSEL GÜDÜM: KAPALI — yalnız GPS");
   const di = d.inis||{};
   const inisK = (k.inis_kilidi===true);
   const bInis=document.getElementById("b_inis");
@@ -1055,6 +1178,16 @@ function gosterim(d){
     (d.dikey?sat("dikey döngü",(d.dikey.aktif?"aktif":"pasif")+
         "  (pasif çağrı "+(d.dikey.pasif||0)+")"):"");
   let u=[];
+  if((d.video||{}).hata)
+    u.push("⚠ video kaydı hatası: "+d.video.hata);
+  if((d.gudum||{}).durum=="KALKIS")
+    u.unshift("🚀 OTONOM KALKIŞ — araç tırmanıyor ("+((d.konum||{}).yukari??0)+" m / "+
+              "hedef 40 m). Çubuğa dokunmak görevi KESER.");
+  if(d.gorsel_izin===false && (d.kilit||{}).kilit_s>0.3)
+    u.unshift("⚡ GÖRSEL GÜDÜM HAZIR — dedektör hedefi tutuyor, izin bekliyor. "+
+              "Araç şu an YALNIZ GPS ile uçuyor.");
+  if(d.gorsel_izin===false)
+    u.push("ℹ Görsel güdüm KAPALI (yalnız GPS). ⛔ Yarışmada AÇIK olmalı.");
   if(k.pilot_devraldi===true && k.kip!="OTONOM")
     u.push("ℹ PİLOT ÇUBUKLA DEVRALDI — güdüm durduruldu. Otonoma dönmek "+
            "için panelde OTONOM'a bas.");
@@ -1147,6 +1280,29 @@ class _Islem(BaseHTTPRequestHandler):
             if yeni_kip != "OTONOM" and _D.get("rtl") is not None:
                 _D["rtl"].dur()
             return self._yaz(200, "application/json", b'{"ok":1}')
+        if self.path == "/api/video":
+            _vk = _D.get("video")
+            if _vk is None:
+                return self._yaz(200, "application/json",
+                                 b'{"ok":0,"sebep":"video kaydi kurulu degil"}')
+            if not g.get("ac"):
+                _vk.dur()
+                return self._yaz(200, "application/json", b'{"ok":1}')
+            ok, mesaj = _vk.basla()
+            return self._yaz(200, "application/json", json.dumps(
+                {"ok": bool(ok), "sebep": mesaj}).encode())
+        if self.path == "/api/gorsel_izin":
+            # ⛔ Ayar bir SINIF niteliğidir; güdüm döngüsü her karede okur,
+            #   yani değişiklik BİR SONRAKİ KAREDEN itibaren geçerli olur
+            #   (uçuş sırasında, yeniden başlatmadan).
+            try:
+                from dow.ayarlar import Ayar as _Ay
+                _Ay.GORSEL_IZIN = bool(g.get("ac"))
+                return self._yaz(200, "application/json", json.dumps(
+                    {"ok": 1, "izin": _Ay.GORSEL_IZIN}).encode())
+            except Exception as e:
+                return self._yaz(200, "application/json",
+                                 json.dumps({"ok": 0, "sebep": str(e)}).encode())
         if self.path == "/api/dikey_inis":
             _in = _D.get("inis")
             if _in is None or ks is None:

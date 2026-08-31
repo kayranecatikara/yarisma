@@ -1401,10 +1401,16 @@ def test_R47_UCTAN_UCA_beyin_gercek_baglantiyla_UCUYOR():
     #   çalışırdı. Bu yüzden faz İLK TİKTEN İTİBAREN ISTASYON olmalı.
     #   (Deneme deposunda varsayılan 45 m'ydi ve KALKIS -> ISTASYON
     #    ilerlemesi beklenirdi.)
-    assert "ISTASYON" in fazlar, "faz ISTASYON'a hiç gelmedi: %s" % sorted(set(fazlar))
-    assert "KALKIS" not in fazlar, (
-        "KALKIŞ fazı devrede — yarışmada araç elle kaldırılır, "
-        "OTONOM'a basınca HEMEN hedefe yönelmeli: %s" % sorted(set(fazlar)))
+    # ⭐ OTONOM KALKIŞ AÇIK (2026-08-31): araç ARM sonrası KENDİ kalkar.
+    #   Faz KALKIS'ta başlar, hedef irtifaya varınca ISTASYON'a geçer.
+    #   (Bir ara kapalıydı — pilot elle kaldırıyordu; kullanıcı kararıyla
+    #    otonom kalkışa dönüldü.)
+    assert "KALKIS" in fazlar, (
+        "KALKIŞ fazı hiç görülmedi — otonom kalkış çalışmıyor: %s"
+        % sorted(set(fazlar)))
+    assert "ISTASYON" in fazlar, (
+        "faz ISTASYON'a hiç gelmedi — kalkış tamamlanmıyor: %s"
+        % sorted(set(fazlar)))
 
     # --- (c) §5.1 MEKANİZMA KAPISI: güdüm çıktısı porta ULAŞIYOR ---
     h = C.KanalHaritasi()
@@ -3699,10 +3705,15 @@ def test_R124_VARSAYILANLAR_GERCEK_ARAC_env_verilmese_de_dogru_ucar():
     assert v == "esuzaklik", "mercek varsayılanı balıkgöz değil: %s" % v
 
     # --- kalkış fazı KAPALI (pilot elle kaldırır) ---
-    v = kos("from dow.ayarlar import Ayar\nprint(Ayar.KALKIS_ALT_M)")
-    assert float(v) == 0.0, (
-        "KALKIS_ALT=%s — OTONOM'a basınca araç hedefi kovalamak yerine "
-        "tırmanmaya çalışır" % v)
+    # ⭐ OTONOM KALKIŞ (kullanıcı kararı 2026-08-31): araç kendi kalkar.
+    v = kos("from dow.ayarlar import Ayar\n"
+            "print(Ayar.KALKIS_ALT_M, Ayar.KALKIS_VZ)")
+    alt, vz = (float(x) for x in v.split())
+    assert alt >= 20.0, (
+        "KALKIS_ALT=%g — otonom kalkış kapalı, araç kendi kalkmaz" % alt)
+    assert vz <= 4.0, (
+        "KALKIS_VZ=%g m/s — dikey döngü HİÇ UÇMADI, ilk denemede bu kadar "
+        "hızlı tırmanmak araç yerden fırlar ya da çakılır demektir" % vz)
 
     # --- GNSS süzgeci AÇIK (hedef GPS'i bozuk geliyor) ---
     v = kos("from gercek.gnss_filtre import SuzgecCfg as S\nprint(S.ACIK)")
@@ -3757,3 +3768,165 @@ def test_R125_SUNUCU_BILGILERI_env_olmadan_da_DOGRU():
          "from gercek.sunucu import SunucuCfg as C\nprint(len(C.SIFRE))"],
         cwd=KOK, env=ort, capture_output=True, text=True)
     assert int(c2.stdout.strip()) >= 8, "şifre varsayılanda boş"
+
+
+# ---------------------------------------------------------------- R126
+def test_R126_panel_JS_TANIMSIZ_FONKSIYON_CAGIRMIYOR():
+    """⛔ Panelde çağrılan her fonksiyon TANIMLI olmalı.
+
+    ⛔ YAŞANDI (2026-08-31, SAHADA, uçuş hazırlığında): eklenen düğmelerin
+      hepsi `post(...)` çağırıyordu ama o fonksiyon HİÇ TANIMLI DEĞİLDİ.
+      Tarayıcı "post is not defined" atıyor, düğmeler SESSİZCE hiçbir şey
+      yapmıyordu. Etkilenenler: RTL, dikey iniş, paket kes, görsel izin,
+      görevi başlat — yani BÜTÜN ACİL DÜĞMELER.
+
+    ⛔ NİYE TESTLER YAKALAMADI: failsafe'i Python'dan doğrudan HTTP ile
+      sınamıştım (`/api/inis`'e POST). Sunucu ucu çalışıyordu; DÜĞME YOLU
+      hiç denenmemişti. `node --check` de yakalamaz — sözdizimi geçerli,
+      hata çalışma anında.
+
+    Bu bekçi: yorumları ve dizgileri ayıklar, NOKTA İLE BAŞLAMAYAN
+    çağrıları toplar, tanımlı adlar + tarayıcı yerleşikleriyle karşılaştırır.
+    """
+    import re
+    s = open(os.path.join(REEL, "gercek", "panel.py"), encoding="utf-8").read()
+    m = re.search(r"<script>([\s\S]*?)</script>", s)
+    assert m, "panelde <script> bloğu yok"
+    js = m.group(1)
+
+    # yorumlar ve dizgiler ayıklanır (Türkçe metinler yanlış eşleşmesin)
+    t = re.sub(r"//[^\n]*", "", js)
+    t = re.sub(r"/\*[\s\S]*?\*/", "", t)
+    t = re.sub(r'"(?:[^"\\\n]|\\.)*"', '""', t)
+    t = re.sub(r"'(?:[^'\\\n]|\\.)*'", "''", t)
+    t = re.sub(r"`(?:[^`\\]|\\.)*`", "``", t)
+
+    cagri = set(re.findall(r"(?<![.\w$])([a-z_][\w$]*)\s*\(", t))
+    tanimli = (set(re.findall(r"function\s+([\w$]+)", t))
+               | set(re.findall(r"(?:const|let|var)\s+([\w$]+)\s*=", t)))
+    yerlesik = {
+        "if", "for", "while", "switch", "catch", "return", "typeof", "new",
+        "await", "async", "delete", "void", "in", "of", "do", "else",
+        "fetch", "setInterval", "setTimeout", "clearInterval", "clearTimeout",
+        "parseInt", "parseFloat", "alert", "confirm", "prompt", "isNaN",
+        "requestAnimationFrame", "cancelAnimationFrame", "encodeURIComponent",
+        "decodeURIComponent", "then", "filter", "map", "atob", "btoa",
+        "structuredClone", "queueMicrotask",
+    }
+    eksik = sorted(c for c in cagri if c not in tanimli and c not in yerlesik)
+    assert not eksik, (
+        "panel JS'inde TANIMSIZ fonksiyon çağrısı: %s\n"
+        "Tarayıcıda 'X is not defined' atar ve düğme SESSİZCE çalışmaz."
+        % eksik)
+
+    # ⛔ `post` özellikle aranır: acil düğmelerin ortak yolu
+    assert re.search(r"(?:async\s+)?function\s+post\s*\(", t), (
+        "`post` fonksiyonu tanımlı değil — RTL, dikey iniş, paket kes, "
+        "görsel izin ve görevi başlat düğmelerinin HEPSİ onu kullanıyor")
+
+
+# ---------------------------------------------------------------- R127
+
+
+# ---------------------------------------------------------------- R127
+def test_R127_VIDEO_KAYDI_gercekten_OKUNABILIR_dosya_yaziyor():
+    """⏺ FPV video kaydı — yarışma kilitlenmeleri videoyla inceleniyor.
+
+    ⛔ "Dosya oluştu" YETMEZ: bozuk bir mp4 de oluşur. Bu bekçi dosyayı
+      GERİ OKUR — çözünürlük, kare sayısı ve ilk karenin çözülebilirliği
+      denetlenir.
+
+    ⛔ AYNI KARE TEKRAR YAZILMAMALI: kamera yazıcıdan yavaşsa aynı görüntü
+      defalarca yazılır ve video "donuk" görünür. Kayıt, kare sayacı
+      değişmediyse atlar.
+
+    ⛔ GÜDÜM DÖNGÜSÜ BLOKE OLMAZ: kayıt kendi iş parçacığında koşar ve
+      kareyi kameradan KENDİ çeker (pull).
+    """
+    import glob
+    import shutil
+    import tempfile
+    import time as _t
+    import numpy as np
+
+    dizin = tempfile.mkdtemp(prefix="vk_bekci_")
+    eski = dict(os.environ)
+    try:
+        os.environ["DOW_VIDEO_DIZIN"] = dizin
+        os.environ["DOW_VIDEO_FPS"] = "12"
+        import importlib
+        from gercek import video_kayit as V
+        importlib.reload(V)
+
+        class _Kam:
+            def __init__(self):
+                self.n = 0
+                self.dondur = False      # aynı kareyi tekrar ver
+
+            def son_kare(self):
+                if not self.dondur:
+                    self.n += 1
+                k = np.zeros((480, 640, 3), dtype=np.uint8)
+                k[:, (self.n * 3) % 600:(self.n * 3) % 600 + 40] = 255
+                return k, _t.time(), self.n
+
+        kam = _Kam()
+        vk = V.VideoKaydi(kam)
+
+        # ⛔ KENDİ İŞ PARÇACIĞINDA: basla() ANINDA dönmeli
+        t0 = _t.monotonic()
+        ok, mesaj = vk.basla("bekci")
+        assert ok, "kayıt başlamadı: %s" % mesaj
+        assert _t.monotonic() - t0 < 1.0, "basla() çağıranı bekletti"
+
+        _t.sleep(2.0)
+        d = vk.durum()
+        assert d["aktif"] is True
+        assert d["kare"] >= 15, "2 saniyede yalnız %d kare" % d["kare"]
+
+        # --- aynı kare tekrar yazılmamalı ---
+        onceki = vk.durum()["kare"]
+        kam.dondur = True
+        _t.sleep(1.2)
+        artis = vk.durum()["kare"] - onceki
+        assert artis <= 1, (
+            "kamera donmuşken %d kare daha yazıldı — video donuk görünür"
+            % artis)
+        kam.dondur = False
+        _t.sleep(0.5)
+
+        vk.dur()
+        assert vk.durum()["aktif"] is False
+
+        # --- DOSYA GERÇEKTEN OKUNABİLİYOR MU ---
+        dosyalar = glob.glob(os.path.join(dizin, "*.mp4"))
+        assert len(dosyalar) == 1, "beklenen tek mp4, bulunan: %s" % dosyalar
+        import cv2
+        c = cv2.VideoCapture(dosyalar[0])
+        try:
+            assert c.isOpened(), "yazılan mp4 AÇILAMADI"
+            g = int(c.get(cv2.CAP_PROP_FRAME_WIDTH))
+            h = int(c.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            n = int(c.get(cv2.CAP_PROP_FRAME_COUNT))
+            okundu, kare = c.read()
+            assert (g, h) == (640, 480), "çözünürlük bozuk: %dx%d" % (g, h)
+            assert n >= 15, "dosyada yalnız %d kare" % n
+            assert okundu and kare is not None, "ilk kare ÇÖZÜLEMEDİ"
+        finally:
+            c.release()
+
+        # --- kamera kare vermiyorsa BAŞLAMAMALI ---
+        class _Bos:
+            def son_kare(self):
+                return None, 0.0, 0
+        vk2 = V.VideoKaydi(_Bos())
+        ok2, mesaj2 = vk2.basla("olmaz")
+        assert ok2 is False and "kare" in mesaj2.lower(), (
+            "kamera yokken kayıt başladı: %s" % mesaj2)
+    finally:
+        os.environ.clear()
+        os.environ.update(eski)
+        shutil.rmtree(dizin, ignore_errors=True)
+        import importlib
+        from gercek import video_kayit as _V
+        importlib.reload(_V)
