@@ -3715,3 +3715,45 @@ def test_R124_VARSAYILANLAR_GERCEK_ARAC_env_verilmese_de_dogru_ucar():
                     "DOW_OPTIK_MODEL", "DOW_KALKIS_ALT", "DOW_GNSS_FILTRE",
                     "DOW_SUNUCU", "DOW_TAKIM_NO"):
         assert anahtar in sh, "baslat.sh %s yazmıyor" % anahtar
+
+
+# ---------------------------------------------------------------- R125
+def test_R125_SUNUCU_BILGILERI_env_olmadan_da_DOGRU():
+    """⛔ Yarışma sunucusu bilgileri KODA GÖMÜLÜ olmalı.
+
+    ⛔ YAŞANDI (2026-08-31, TEST MASASINDA): bilgiler yalnız `baslat.sh`
+      içindeydi. Operatör `python3 araclar/sunucu_testi.py` komutunu
+      doğrudan çalıştırınca env yüklenmedi ve araç şunu bastı:
+          adres    : http://127.0.0.1:5000
+          kullanıcı: ⛔ BOŞ
+          takım no : 0
+      Sahada dakika kaybettirdi. Aynı ders R124'te araç varsayılanları
+      için alınmıştı: YARIŞMA DEPOSUNDA VARSAYILAN = YARIŞMA DEĞERİ.
+
+    ⛔ Bu bekçi ENV TAMAMEN TEMİZKEN sınar.
+    """
+    import subprocess
+    ort = {k: v for k, v in os.environ.items() if not k.startswith("DOW_")}
+    ort["PYTHONPATH"] = KOK
+    c = subprocess.run(
+        [sys.executable, "-c",
+         "from gercek.sunucu import SunucuCfg as C\n"
+         "print(C.ADRES); print(C.KADI); print(C.TAKIM_NO); print(C.GONDER_HZ)"],
+        cwd=KOK, env=ort, capture_output=True, text=True)
+    assert c.returncode == 0, c.stderr[-400:]
+    adres, kadi, takim, hz = c.stdout.strip().splitlines()
+
+    assert "10.0.0.10" in adres and "10001" in adres, (
+        "sunucu adresi varsayılanda yanlış: %s" % adres)
+    assert kadi == "hamidiye", "kullanıcı adı varsayılanda boş/yanlış: %r" % kadi
+    assert int(takim) == 2, "takım numarası varsayılanda %s — hakem 2 dedi" % takim
+    # ⛔ 2 Hz doküman sınırı; üstü 400 + hata kodu 3 ile cezalandırılır
+    assert 1.0 <= float(hz) <= 2.0, "gönderim hızı doküman aralığı dışında: %s" % hz
+    assert float(hz) < 2.0, "2 Hz sınırına pay bırakılmamış: %s" % hz
+
+    # şifre boş olmamalı (değerini teste gömmüyoruz)
+    c2 = subprocess.run(
+        [sys.executable, "-c",
+         "from gercek.sunucu import SunucuCfg as C\nprint(len(C.SIFRE))"],
+        cwd=KOK, env=ort, capture_output=True, text=True)
+    assert int(c2.stdout.strip()) >= 8, "şifre varsayılanda boş"

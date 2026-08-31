@@ -32,12 +32,20 @@ import urllib.request
 
 
 class SunucuCfg:
-    ADRES   = os.environ.get("DOW_SUNUCU", "http://127.0.0.1:5000")
-    KADI    = os.environ.get("DOW_SUNUCU_KADI", "")
-    SIFRE   = os.environ.get("DOW_SUNUCU_SIFRE", "")
-    TAKIM_NO = int(os.environ.get("DOW_TAKIM_NO", "0"))
+    # ⛔⛔ YARIŞMA BİLGİLERİ KODA GÖMÜLÜ — env OLMADAN DA ÇALIŞSIN.
+    #   YAŞANDI (2026-08-31, test masasında): bilgiler yalnız `baslat.sh`
+    #   içindeydi; `python3 araclar/sunucu_testi.py` doğrudan
+    #   çalıştırılınca env yüklenmedi ve araç 127.0.0.1:5000'e boş
+    #   kullanıcıyla bağlanmaya çalıştı. Sahada dakika kaybettirdi.
+    #   ⭐ Aynı ders araç varsayılanlarında da alınmıştı (bekçi R124):
+    #     YARIŞMA DEPOSUNDA VARSAYILAN = YARIŞMA DEĞERİ.
+    #   env ile ezilebilir; `baslat.sh` yine hepsini açıkça yazar.
+    ADRES   = os.environ.get("DOW_SUNUCU", "http://10.0.0.10:10001")
+    KADI    = os.environ.get("DOW_SUNUCU_KADI", "hamidiye")
+    SIFRE   = os.environ.get("DOW_SUNUCU_SIFRE", "Z8vN1cR5tY")
+    TAKIM_NO = int(os.environ.get("DOW_TAKIM_NO", "2"))
     #: Gönderim hızı. ⛔ 2.0'ı ASLA aşma (doküman §7: 400 + hata kodu 3).
-    GONDER_HZ = float(os.environ.get("DOW_SUNUCU_HZ", 1.5))
+    GONDER_HZ = float(os.environ.get("DOW_SUNUCU_HZ", 1.8))
     ZAMAN_ASIMI = float(os.environ.get("DOW_SUNUCU_ASIM", 2.0))
 
 
