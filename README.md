@@ -100,6 +100,9 @@ Adres, port ve takım numarası **kesinleşti**; dokunman gereken bir şey yok.
 **Sahada hakemden teyit edilecek tek şey:** kilitlenme uç adresi
 (aşağıdaki açık soruya bak).
 
+> 📡 **Sunucu bağlantısını baştan sona anlatan saha kartı:**
+> `docs/SUNUCU_BAGLANTI.html` — tarayıcıda aç, internet gerekmez.
+
 ## 1.2 · Sunucuyu sına — ⭐ uçmadan önce
 
 ```bash
