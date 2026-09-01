@@ -49,26 +49,107 @@ ALANLAR = ("takim_numarasi", "iha_enlem", "iha_boylam", "iha_irtifa",
 
 
 class Hedef:
-    """Daire çizerek uçan bir İHA. Konumu GERÇEK; bozulma dışarıda eklenir."""
+    """Hedef İHA'nın GERÇEK konumu. Bozulma dışarıda eklenir.
 
-    def __init__(self, enlem, boylam, irtifa, yaricap, hiz):
-        self.e0, self.b0 = enlem, boylam
-        self.irtifa, self.R, self.V = irtifa, yaricap, hiz
+    ⭐ MERKEZ SONRADAN KURULUR (--merkez oto, VARSAYILAN).
+       Sahada elle koordinat girmek, sahayı değiştirdiğimiz anda hedefi
+       kilometrelerce öteye koymak demekti. Bunun yerine AVCI DRONUN
+       kendi bildirdiği ilk geçerli konum merkez yapılır; hedef bizden
+       `uzaklik` metre ötede doğar. Hangi sahada olursak olalım doğru.
+
+    DESENLER — hangi soruyu sorduğuna göre seç:
+      "rastgele" : hedef her `degisim` saniyede RASTGELE bir kerterize
+                   IŞINLANIR, o dönem boyunca sabit bir rotada uçar.
+                   ⭐ "drone hedefe doğru yöneliyor mu" SORUSUNUN TESTİ:
+                   ışınlanmadan sonra avcının burnunu yeni kerterize
+                   çevirip çevirmediğine bakılır.
+      "sabit"    : tek bir kerteriz/uzaklıkta durur. En sade geometri.
+      "daire"    : merkez etrafında daire çizer (eski davranış).
+    """
+
+    def __init__(self, desen="rastgele", irtifa=80.0, uzaklik=250.0,
+                 kerteriz=90.0, hiz=15.0, degisim=45.0, yaricap=200.0,
+                 tohum=1):
+        self.desen = desen
+        self.irtifa, self.uzaklik, self.kerteriz = irtifa, uzaklik, kerteriz
+        self.V, self.degisim, self.R = hiz, degisim, yaricap
+        self.tohum = tohum
         self.t0 = time.time()
+        self.hazir = False
+        self.e0 = self.b0 = None
+        self.M = self.N = self.cos0 = None
+        self._donem = -1
+        self._donem_bilgi = None
+
+    def merkez_kur(self, enlem, boylam):
+        """Referans noktayı kur — hedef bundan sonra var olur."""
         la = math.radians(enlem)
+        self.e0, self.b0 = enlem, boylam
+        # Meridyen (M) ve dik kesit (N) eğrilik yarıçapları: metre farkını
+        # derece farkına çevirmenin doğru yolu. Düz "1 derece = 111 km"
+        # yaklaşımı boylamda enleme göre şaşar.
         self.M = A * (1 - E2) / (1 - E2 * math.sin(la) ** 2) ** 1.5
         self.N = A / math.sqrt(1 - E2 * math.sin(la) ** 2)
         self.cos0 = math.cos(la)
+        self.t0 = time.time()
+        self._donem = -1
+        self.hazir = True
+
+    def _dereceye(self, x, y):
+        """kuzey x / doğu y metre -> (enlem, boylam) derece"""
+        return (self.e0 + math.degrees(x / self.M),
+                self.b0 + math.degrees(y / (self.N * self.cos0)))
+
+    def _donemi_sec(self, gecen):
+        """rastgele desen: (kerteriz, uzaklık, rota) — dönem başına SABİT.
+
+        Tohumu dönem numarasından türetiyoruz ki değer dönem içinde
+        titremesin: aynı dönemde her çağrı aynı sayıyı versin.
+        """
+        d = int(gecen / self.degisim) if self.degisim > 0 else 0
+        if d != self._donem:
+            rng = random.Random(self.tohum + d * 7919)
+            self._donem = d
+            self._donem_bilgi = (rng.uniform(0.0, 360.0),
+                                 rng.uniform(self.uzaklik * 0.6,
+                                             self.uzaklik * 1.4),
+                                 rng.uniform(0.0, 360.0))
+        return self._donem_bilgi
+
+    def nerede(self):
+        """Şu anki dönemin (kerteriz°, uzaklık m) özeti — rapor için."""
+        if not self.hazir:
+            return None
+        if self.desen == "sabit":
+            return self.kerteriz, self.uzaklik
+        if self.desen == "daire":
+            return None
+        k, u, _ = self._donemi_sec(time.time() - self.t0)
+        return k, u
 
     def konum(self, t=None):
-        """(enlem, boylam, irtifa, hiz) — t saniye sonraki GERÇEK konum."""
+        """(enlem, boylam, irtifa, hiz) — ya da merkez yoksa None."""
+        if not self.hazir:
+            return None
         t = (time.time() if t is None else t) - self.t0
-        w = self.V / self.R                       # açısal hız (rad/s)
-        x = self.R * math.cos(w * t)              # kuzey (m)
-        y = self.R * math.sin(w * t)              # doğu  (m)
-        e = self.e0 + math.degrees(x / self.M)
-        b = self.b0 + math.degrees(y / (self.N * self.cos0))
-        return e, b, self.irtifa, self.V
+        if self.desen == "daire":
+            w = self.V / self.R                   # açısal hız (rad/s)
+            x, y = self.R * math.cos(w * t), self.R * math.sin(w * t)
+            hiz = self.V
+        elif self.desen == "sabit":
+            k = math.radians(self.kerteriz)
+            x, y = self.uzaklik * math.cos(k), self.uzaklik * math.sin(k)
+            hiz = 0.0
+        else:                                     # "rastgele"
+            kert, uzak, rota = self._donemi_sec(t)
+            icinde = t - (int(t / self.degisim) * self.degisim
+                          if self.degisim > 0 else 0.0)
+            k, r = math.radians(kert), math.radians(rota)
+            x = uzak * math.cos(k) + self.V * icinde * math.cos(r)
+            y = uzak * math.sin(k) + self.V * icinde * math.sin(r)
+            hiz = self.V
+        e, b = self._dereceye(x, y)
+        return e, b, self.irtifa, hiz
 
 
 class Bozucu:
@@ -85,6 +166,10 @@ class Bozucu:
         self.sayac = {"paket": 0, "sicrama": 0, "kesinti": 0}
 
     def boz(self, hedef):
+        # ⛔ MERKEZ HENÜZ KURULMADI: hedef YOKTUR. Uydurma bir konum
+        #   döndürmek, güdüme "hedef şurada" diye yalan söylemektir.
+        if not hedef.hazir:
+            return None
         gecen = time.time() - self.t0
         # ⛔ KESİNTİ: son paketi TEKRARLA (gerçek jammer da böyle yapar —
         #   yeni veri gelmez, eski değer tekrar tekrar görünür)
@@ -113,8 +198,9 @@ class Sunucu(BaseHTTPRequestHandler):
     bozucu = None
     kadi = "hamidiye"
     sifre = "Z8vN1cR5tY"
+    hedef_takim = 1
     sayac = {"giris": 0, "telemetri": 0, "red_bicim": 0, "red_hiz": 0,
-             "kilit": 0, "saat": 0}
+             "kilit": 0, "saat": 0, "merkez_bekle": 0}
     _son_telem = [0.0]
     _kilit = threading.Lock()
     sessiz = True
@@ -181,14 +267,43 @@ class Sunucu(BaseHTTPRequestHandler):
                 Sunucu.sayac["red_bicim"] += 1
                 return self._yaz(204)
             Sunucu.sayac["telemetri"] += 1
-            e, b, irt, hiz = Sunucu.bozucu.boz(Sunucu.hedef)
+            # ⭐ MERKEZİ AVCI DRONUN KENDİ KONUMUNDAN KUR (--merkez oto).
+            #   (0,0) gelen paket GEÇERLİ SAYILMAZ: o, köken kurulmadan
+            #   ya da GPS fix'siz gönderilen paketin imzasıdır — tam da
+            #   2026-09-01'de hakemlerin "full 0 basıyorsunuz" dediği hâl.
+            if not Sunucu.hedef.hazir:
+                try:
+                    e0 = float(g.get("iha_enlem") or 0.0)
+                    b0 = float(g.get("iha_boylam") or 0.0)
+                except (TypeError, ValueError):
+                    e0 = b0 = 0.0
+                if abs(e0) > 1e-3 and abs(b0) > 1e-3:
+                    Sunucu.hedef.merkez_kur(e0, b0)
+                    print("  ⭐ MERKEZ KURULDU — avcı dronun bildirdiği konum:"
+                          " %.6f, %.6f" % (e0, b0))
+                else:
+                    Sunucu.sayac["merkez_bekle"] += 1
+                    return self._yaz(200, {"sunucusaati": self._saat(),
+                                           "konumBilgileri": []})
+            bozuk = Sunucu.bozucu.boz(Sunucu.hedef)
+            if bozuk is None:
+                return self._yaz(200, {"sunucusaati": self._saat(),
+                                       "konumBilgileri": []})
+            e, b, irt, hiz = bozuk
+            # ⛔⛔ YANIT ŞEMASI = SUNUCUNUN GERÇEĞİ, PDF'İNKİ DEĞİL.
+            #   (2026-09-01, ham yanıt basılarak görüldü.) Eskiden burada
+            #   PDF adları vardı: `sunucu_saati` / `hedef_iha_verileri` /
+            #   `enlem` / `boylam` / `irtifa_ev` / `hiz` / `saat_farki`.
+            #   `hedef.py` ikisini de kabul ettiği için prova PATLAMAZDI —
+            #   sessizce YARIŞMADAKİNDEN BAŞKA bir kod yolunu sınardık.
+            #   Provanın tek anlamı yarışmanın aynısı olması.
             return self._yaz(200, {
-                "sunucu_saati": self._saat(),
-                "hedef_iha_verileri": [{
-                    "takim_no": 1,
-                    "enlem": round(e, 7), "boylam": round(b, 7),
-                    "irtifa_ev": round(irt, 1), "hiz": round(hiz, 1),
-                    "saat_farki": int(Sunucu.bozucu.gecikme * 1000)}]})
+                "sunucusaati": self._saat(),
+                "konumBilgileri": [{
+                    "takim_numarasi": Sunucu.hedef_takim,
+                    "iha_enlem": round(e, 7), "iha_boylam": round(b, 7),
+                    "iha_irtifa": round(irt, 1), "iha_hizi": round(hiz, 1),
+                    "zaman_farki": int(Sunucu.bozucu.gecikme * 1000)}]})
 
         if self.path == "/api/kilitlenme_bilgisi":
             Sunucu.sayac["kilit"] += 1
@@ -200,11 +315,28 @@ class Sunucu(BaseHTTPRequestHandler):
 def main():
     a = argparse.ArgumentParser(description="Sahte yarışma sunucusu")
     a.add_argument("--port", type=int, default=10001)
-    a.add_argument("--merkez", default="37.9797,41.8443",
-                   help="hedefin daire merkezi: enlem,boylam")
+    a.add_argument("--merkez", default="oto",
+                   help="referans nokta: 'oto' (VARSAYILAN — avcı dronun "
+                        "kendi bildirdiği ilk konum) ya da enlem,boylam")
+    a.add_argument("--desen", default="rastgele",
+                   choices=("rastgele", "sabit", "daire"),
+                   help="rastgele = her --degisim sn'de yeni kerterize "
+                        "ışınlanır (YÖNELME TESTİ); sabit = tek nokta; "
+                        "daire = merkez etrafında tur")
+    a.add_argument("--uzaklik", type=float, default=250.0,
+                   help="hedefin bizden uzaklığı (m)")
+    a.add_argument("--kerteriz", type=float, default=90.0,
+                   help="(sabit desende) kuzeyden saat yönünde derece; "
+                        "0=kuzey, 90=doğu")
+    a.add_argument("--degisim", type=float, default=45.0,
+                   help="(rastgele desende) kaç saniyede bir ışınlansın")
+    a.add_argument("--tohum", type=int, default=1,
+                   help="rastgeleliğin tohumu — aynı tohum aynı senaryo")
+    a.add_argument("--takim", type=int, default=1,
+                   help="hedef İHA'nın takım numarası")
     a.add_argument("--irtifa", type=float, default=80.0)
     a.add_argument("--yaricap", type=float, default=200.0)
-    a.add_argument("--hiz", type=float, default=20.0)
+    a.add_argument("--hiz", type=float, default=15.0)
     a.add_argument("--gurultu", type=float, default=3.0, help="metre (sigma)")
     a.add_argument("--sicrama", type=float, default=25.0, help="kaç sn'de bir")
     a.add_argument("--sicrama-m", type=float, default=40.0)
@@ -215,8 +347,13 @@ def main():
                    help="hiç bozma — saf geometri sınaması")
     a = a.parse_args()
 
-    e0, b0 = (float(x) for x in a.merkez.split(","))
-    Sunucu.hedef = Hedef(e0, b0, a.irtifa, a.yaricap, a.hiz)
+    Sunucu.hedef_takim = a.takim
+    Sunucu.hedef = Hedef(desen=a.desen, irtifa=a.irtifa, uzaklik=a.uzaklik,
+                         kerteriz=a.kerteriz, hiz=a.hiz, degisim=a.degisim,
+                         yaricap=a.yaricap, tohum=a.tohum)
+    if a.merkez != "oto":
+        e0, b0 = (float(x) for x in a.merkez.split(","))
+        Sunucu.hedef.merkez_kur(e0, b0)
     if a.gurultusuz:
         Sunucu.bozucu = Bozucu(0, 0, 0, 0, 0, 0)
     else:
@@ -228,10 +365,27 @@ def main():
     print("=" * 70)
     print("  adres      : http://127.0.0.1:%d" % a.port)
     print("  kullanıcı  : %s" % Sunucu.kadi)
-    print("  HEDEF      : %.4f, %.4f merkezli %g m yarıçaplı daire"
-          % (e0, b0, a.yaricap))
-    print("               %g m irtifa, %g m/s  (tur süresi %.0f s)"
-          % (a.irtifa, a.hiz, 2 * math.pi * a.yaricap / a.hiz))
+    if a.merkez == "oto":
+        print("  MERKEZ     : OTO — avcı dronun bildireceği ilk GEÇERLİ")
+        print("               konum referans olacak. (0,0) gelirse hedef")
+        print("               ÜRETİLMEZ, 'merkez bekleniyor' sayılır.")
+    else:
+        print("  MERKEZ     : %s (elle verildi)" % a.merkez)
+    if a.desen == "rastgele":
+        print("  HEDEF      : RASTGELE — her %g s'de bir yeni kerterize"
+              % a.degisim)
+        print("               ışınlanır, %g-%g m uzaklıkta doğar,"
+              % (a.uzaklik * 0.6, a.uzaklik * 1.4))
+        print("               dönem boyunca %g m/s ile düz uçar." % a.hiz)
+        print("               ⭐ SORU: ışınlanınca avcı burnunu yeni")
+        print("                  kerterize çeviriyor mu?")
+    elif a.desen == "sabit":
+        print("  HEDEF      : SABİT — kerteriz %g°, uzaklık %g m"
+              % (a.kerteriz, a.uzaklik))
+    else:
+        print("  HEDEF      : DAİRE — %g m yarıçap, %g m/s (tur %.0f s)"
+              % (a.yaricap, a.hiz, 2 * math.pi * a.yaricap / a.hiz))
+    print("               irtifa %g m" % a.irtifa)
     if a.gurultusuz:
         print("  BOZULMA    : YOK (saf geometri)")
     else:
@@ -250,11 +404,14 @@ def main():
         while True:
             time.sleep(10)
             c, b = Sunucu.sayac, Sunucu.bozucu.sayac
+            nd = Sunucu.hedef.nerede()
+            yer = ("merkez BEKLENİYOR (%d paket (0,0) geldi)"
+                   % c["merkez_bekle"]) if not Sunucu.hedef.hazir else (
+                  "hedef: kerteriz %.0f° · %.0f m" % nd if nd else "hedef: daire")
             print("  [%5.0f s] giriş %d · telemetri %d · red(biçim %d, hız %d)"
-                  " · kilit %d   |  sıçrama %d · kesinti %d"
+                  " · kilit %d  |  %s"
                   % (time.time() - Sunucu.bozucu.t0, c["giris"], c["telemetri"],
-                     c["red_bicim"], c["red_hiz"], c["kilit"],
-                     b["sicrama"], b["kesinti"]))
+                     c["red_bicim"], c["red_hiz"], c["kilit"], yer))
     threading.Thread(target=rapor, daemon=True).start()
     try:
         s.serve_forever()

@@ -130,11 +130,12 @@ export DOW_KMD_EKS_KIP="${DOW_KMD_EKS_KIP:--1}"
 # ikisi de 1700-2100 aralığında. Ölü bant `alt_hold_deadband = 20`.
 export DOW_INIS_CUBUK="${DOW_INIS_CUBUK:--0.35}"
 
-EK=(); SUNUCU=1
+EK=(); SUNUCU=1; SAHTE=0
 for x in "$@"; do
     case "$x" in
         --deneme) SUNUCU=0 ;;
         --kapat)  ;;
+        --sahte)  SAHTE=1; EK+=("$x") ;;
         *) EK+=("$x") ;;
     esac
 done
@@ -151,7 +152,16 @@ python3 -c "import cv2,numpy" 2>/dev/null || {
     kirmizi "  HATA: paketler eksik ->  pip install -r requirements.txt"; exit 1; }
 
 # ---- backend ayakta mı ----
-if ! python3 - <<'PY'
+# ⛔ --sahte donanımsız denemedir (seri port ve kamera aranmaz);
+#   backend de aranmaz. Aksi hâlde "donanımsız" yol fiilen kırık
+#   olur — bu tuzağa `drone_yki.main()` içinde bir kez düşülmüştü
+#   (29 Ağu 2026). HABERLEŞME TESTİNİN YOLU BUDUR: drone açmadan
+#   sunucuya bağlanılır, hedef verisi panelde görülür.
+#   ⚠ Bu kipte sunucuya giden telemetri SAHTEdir.
+if [ "$SAHTE" = "1" ]; then
+    sari "  SAHTE KİP — backend/kamera/seri port aranmıyor"
+    sari "  ⚠ Sunucuya giden telemetri SAHTE (gerçek veri için drone gerekir)"
+elif ! python3 - <<'PY'
 import socket, sys
 try: socket.create_connection(("127.0.0.1", 8766), timeout=1.5).close()
 except Exception: sys.exit(1)
@@ -161,8 +171,9 @@ then
     echo "     ./skydagger/baslat_backend.sh  ->  /connect <port> -> RC_ENABLE"
     echo "     -> 2S pili tak (MAVİ) -> STOP -> EXTERNAL"
     exit 1
+else
+    yesil "  Skydagger backend: BULUNDU"
 fi
-yesil "  Skydagger backend: BULUNDU"
 
 if [ "$SUNUCU" = "1" ]; then
     [ "$DOW_TAKIM_NO" = "0" ] && kirmizi "  ⛔ DOW_TAKIM_NO=0 — HAKEMDEN ALDIĞIN NUMARAYI GİR!"

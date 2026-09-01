@@ -508,8 +508,23 @@ def _telemetri(gb, ks, beyin):
     r, p, yw = gb.yonelim()
     kutu = PANEL._D.get("son_kutu") or (0, 0, 0, 0)
     olcut = PANEL._D.get("olcut") or {}
-    enlem, boylam, _ = (gb.cerceve.dereceye(x, y, z) if gb.cerceve.hazir
-                        else (0.0, 0.0, 0.0))
+    # ⛔⛔ KONUM DOĞRUDAN GPS'TEN — YEREL ÇERÇEVEDEN DEĞİL (2026-09-01).
+    #   YAŞANDI (haberleşme testi, hakemler bildirdi): sunucuya
+    #   `iha_enlem = 0.0, iha_boylam = 0.0` gidiyordu. Sebep: konumu
+    #   GPS -> metre -> derece diye GİDİP GELDİRİYORDUK ve panelde
+    #   KÖKEN KUR'a basılmadığı için `cerceve.hazir` False'tu; else dalı
+    #   sessizce (0,0) veriyordu. Oysa aracın enlem/boylamı O SIRADA
+    #   ELİMİZDEYDİ (16 uydu, taze GPS çerçevesi).
+    #   Yerel metre çerçevesi GÜDÜMÜN iç aracıdır; sunucuya rapor
+    #   ettiğimiz konumun ona bağlı olması için hiçbir sebep yok.
+    #   Köken yoksa çerçeveye düşülür (yine de 0 olabilir) — ama artık
+    #   GPS varken ASLA sıfır göndermiyoruz.
+    g_ham = gb.gps_konum()
+    if g_ham is not None:
+        enlem, boylam = g_ham
+    else:
+        enlem, boylam, _ = (gb.cerceve.dereceye(x, y, z) if gb.cerceve.hazir
+                            else (0.0, 0.0, 0.0))
     return {
         "takim_numarasi": SunucuCfg.TAKIM_NO,
         "iha_enlem": round(enlem, 7),

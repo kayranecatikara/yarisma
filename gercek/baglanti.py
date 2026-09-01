@@ -159,6 +159,26 @@ class GercekBaglanti(AracArayuzu):
         return self.cerceve.metreye(g["enlem"], g["boylam"],
                                     irtifa_amsl=g["irtifa_amsl_m"])
 
+    def gps_konum(self):
+        """Aracın HAM GPS enlem/boylamı (derece) — ya da None (bayat/yok).
+
+        ⛔ NİYE VAR (2026-09-01, haberleşme testinde hakemler bildirdi):
+          yarışma sunucusuna `iha_enlem = 0.0, iha_boylam = 0.0`
+          gidiyordu. Konumu GPS -> yerel metre -> derece diye GİDİP
+          GELDİRİYORDUK; panelde KÖKEN KUR'a basılmadığı için çerçeve
+          hazır değildi ve dönüş sessizce (0,0) veriyordu — oysa aracın
+          enlem/boylamı o sırada elimizdeydi (16 uydu, taze çerçeve).
+          Yerel metre çerçevesi GÜDÜMÜN iç aracıdır; DIŞARIYA rapor
+          ettiğimiz konumun ona bağlı olması için hiçbir sebep yok.
+        """
+        g = self._al("gps")
+        if not g:
+            return None
+        try:
+            return float(g["enlem"]), float(g["boylam"])
+        except (KeyError, TypeError, ValueError):
+            return None
+
     def yonelim(self):
         """(roll, pitch, yaw) RADYAN — doğrudan CRSF ATTITUDE."""
         a = self._al("durus")

@@ -448,6 +448,31 @@ class Beyin:
             self.tani = {"durum": "BAGLANTI_YOK"}
             return None
 
+        # ⛔⛔ YEREL ÇERÇEVE YOKSA TİK ATLANIR (2026-09-01, tezgâhta ÖLÇÜLDÜ).
+        #   `baglanti.konum()` köken kurulmadan (0,0,0) döndürür. O hâlde
+        #   ilk tikte `_zemin_z = 0` olur ve `yukseklik = 0 - 0 = 0` DAİMA
+        #   sıfır çıkar. KALKIS'ın çıkış şartı `yukseklik >= KALKIS_ALT_M -
+        #   KALKIS_TOL_M` ASLA sağlanmaz: araç KALKIS_VZ ile SONSUZA KADAR
+        #   tırmanır ve hiçbir zaman ISTASYON'a geçmez.
+        #
+        #   ÖLÇÜM: köken kurmadan OTONOM'a basıldı. Hakem otonomu VERDİ
+        #   (kaynak=OTONOM, sebep=-), faz 70 s boyunca KALKIS'ta kaldı,
+        #   gaz komutu 0.105 -> 0.148 diye tırmanmayı sürdürdü.
+        #
+        #   ⛔ ESKİDEN BUNU PANELİN ÖLÜ OTONOM DÜĞMESİ ENGELLİYORDU —
+        #     yanlışlıkla. Düğme (haklı olarak) kaldırılınca kapı açıldı.
+        #     Kapının doğru yeri burasıdır: setpoint ÜRETİLMEZSE hakemin
+        #     dört şartından (c) düşer, otonom açılmaz ve kontrol pilotta
+        #     kalır. Arıza yönü güvenli.
+        #
+        #   ⚠ `getattr` ile korumalı: `cerceve`si olmayan bağlantılar
+        #     (sim/`truth` yolu, birim testlerinin sahteleri) meşrudur ve
+        #     ESKİSİ GİBİ çalışmaya devam eder.
+        _cer = getattr(self.b, "cerceve", None)
+        if _cer is not None and not getattr(_cer, "hazir", True):
+            self.tani = {"durum": "KOKEN_YOK"}
+            return None
+
         dp = self.b.konum()
         yon = self.b.yonelim()
         own_roll = math.degrees(yon[0]); own_pitch = math.degrees(yon[1])

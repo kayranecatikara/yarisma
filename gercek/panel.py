@@ -561,7 +561,30 @@ const yerL=pad(document.getElementById("padL"),document.getElementById("topuzL")
 const yerR=pad(document.getElementById("padR"),document.getElementById("topuzR"),"roll","pitch",true);
 
 document.getElementById("b_manuel").onclick=()=>kip("MANUEL");
-document.getElementById("b_otonom").onclick=()=>kip("OTONOM");
+// ⛔⛔ DÜĞME ARTIK ÖLMÜYOR (2026-09-01 — SAHADA YAŞANDI).
+//   ESKİ HÂLİ: ön uçuş listesi eksikken `bOto.disabled=true` idi.
+//   Tıklamak HİÇBİR ŞEY yapmıyordu: ne hareket, ne uyarı, ne sebep.
+//   Operatör yarışma sırasında düğmeye bastı, hiçbir şey olmadı ve
+//   niye olmadığını göremedi. Kaçış yolu (çift tıkla zorla) hiçbir
+//   yerde YAZMIYORDU — keşfedilmesi imkânsızdı.
+//   YENİ HÂLİ: düğme HER ZAMAN tıklanabilir; eksik varsa hangi
+//   maddelerin eksik olduğunu SAYARAK onay ister. Kaza koruması
+//   duruyor (tek tıkla otonoma geçilemez) ama artık GÖRÜNÜR.
+//   ⛔ HAKEM DEĞİŞMEDİ: `komut.py`'deki dört şart yerinde. Bu düğme
+//     yalnız panelin kip SEÇİMİDİR; otonomun gerçekten açılıp
+//     açılmayacağına hakem karar verir (R39/R108).
+document.getElementById("b_otonom").onclick=()=>{
+  const kls=(window._sonDurum||{}).kontrol||{};
+  const eksik=kls.kalan_metin||kls.kalan||[];
+  if(eksik.length && !window._klZorla){
+    if(!confirm("ÖN UÇUŞ KONTROLÜ EKSİK — "+eksik.length+" madde:\n\n  · "+
+                eksik.join("\n  · ")+
+                "\n\nYine de OTONOM açılsın mı?\n"+
+                "(bu karar uçuş kaydına düşer)")) return;
+    window._klZorla=true;
+  }
+  kip("OTONOM");
+};
 // ⏺ VİDEO KAYDI — FPV görüntüsünü dosyaya yazar.
 //   Yarışma kilitlenmeleri kaydedilen videolarla inceliyor (doküman §8);
 //   uçuş sonrası analizde de görüntü ile log birbirini doğrular.
@@ -1110,10 +1133,17 @@ function gosterim(d){
   //   basmayı engeller. Zorlamak isteyen onay kutusundan geçer.
   const bOto=document.getElementById("b_otonom");
   if(bOto){
-    bOto.disabled=!kls.hazir&&!window._klZorla;
-    bOto.title=kls.hazir?"otonom güdüme geç"
-      :("kapalı — eksik: "+(kls.kalan||[]).join(", ")+
-        "   (yine de açmak için çift tıkla)");
+    // ⛔ `bOto.disabled` KASTEN KULLANILMIYOR — bkz. onclick'teki gerekçe.
+    //   Ölü düğme sahada bize bir yarışma hakkına mal oldu. Kilit yerine
+    //   GÖRÜNÜR uyarı: etiket ⚠ alır, ipucu eksikleri yazar, tıklayınca
+    //   onay kutusu maddeleri tek tek sayar.
+    const eksik=(kls.kalan||[]);
+    bOto.disabled=false;
+    bOto.textContent=eksik.length?"OTONOM ⚠":"OTONOM";
+    bOto.title=eksik.length
+      ?("ÖN UÇUŞ EKSİK ("+eksik.length+"): "+eksik.join(", ")+
+        " — basınca onay ister, otonom yine de açılabilir")
+      :"otonom güdüme geç"+(kls.gorsel_ucus?"":"  (GPS güdüm, görsel kapalı)");
   }
   // ---- UÇUŞ KAYDI ----
   const ky=d.kayit;

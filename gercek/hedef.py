@@ -58,9 +58,31 @@ class HedefKaynagi:
     # ------------------------------------------------------------------
     def besle(self, paket, t=None):
         """Yeni hedef paketi. Döner: kabul edildi mi."""
+        # ⛔⛔ ALAN ADLARI — SUNUCUNUN GERÇEĞİ, DOKÜMANIN PDF'İ DEĞİL
+        #   (2026-09-01, haberleşme testinde ham yanıt basılarak görüldü):
+        #     sunucu -> {"konumBilgileri": [{"takim_numarasi": 18,
+        #                 "iha_enlem":..., "iha_boylam":..., "iha_irtifa":...,
+        #                 "iha_hizi":..., "zaman_farki": 740}]}
+        #   Biz `enlem/boylam/irtifa_ev/hiz/saat_farki` arıyorduk; HİÇBİRİ
+        #   tutmuyordu. Sonuç: sunucu hedefi GÖNDERİYOR, HTTP 200 dönüyor,
+        #   hata sayacı 0 kalıyor ve hedef panelde "YOK" görünüyor —
+        #   TAMAMEN SESSİZ bir hata. Gönderme tarafında birebir aynı tuzağa
+        #   düşmüştük (bekçi R128).
+        #   PDF adları da kabul edilir: sahte sunucu ve birim testleri
+        #   onları kullanıyor, ayrıca sunucu ileride PDF'e dönerse kırılmayız.
+        def _al(*adlar):
+            for ad in adlar:
+                if ad in paket and paket[ad] is not None:
+                    return paket[ad]
+            raise KeyError(adlar[0])
         try:
-            e = float(paket["enlem"]); b = float(paket["boylam"])
-            irt = float(paket["irtifa_ev"]); hz = float(paket.get("hiz", 0.0))
+            e = float(_al("iha_enlem", "enlem"))
+            b = float(_al("iha_boylam", "boylam"))
+            irt = float(_al("iha_irtifa", "irtifa_ev"))
+            try:
+                hz = float(_al("iha_hizi", "hiz"))
+            except KeyError:
+                hz = 0.0
         except (KeyError, TypeError, ValueError) as ex:
             self.n_red += 1; self.son_red_sebep = "alan: %s" % ex
             return False
@@ -73,10 +95,14 @@ class HedefKaynagi:
             self.n_red += 1; self.son_red_sebep = "hız aralık dışı: %.1f" % hz
             return False
         with self._kilit:
-            self._paket = {"takim_no": paket.get("takim_no"),
+            self._paket = {"takim_no": (paket.get("takim_numarasi")
+                                       if paket.get("takim_numarasi") is not None
+                                       else paket.get("takim_no")),
                            "enlem": e, "boylam": b, "irtifa_ev": irt,
                            "hiz": hz,
-                           "saat_farki": float(paket.get("saat_farki", 0.0))}
+                           "saat_farki": float(
+                               paket.get("zaman_farki",
+                                         paket.get("saat_farki", 0.0)) or 0.0)}
             self._t = time.monotonic() if t is None else t
             self.n_paket += 1
         return True

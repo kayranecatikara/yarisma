@@ -43,6 +43,22 @@ MADDELER = [
      "Otonomu kesmenin en hızlı yolu kumanda çubuğudur."),
 ]
 
+#: ⛔⛔ GÖRSEL UÇUŞ DEĞİLSE BU İKİSİ ZORUNLU DEĞİL (2026-09-01, sahada)
+#   `--gorsel` verilmemişse dedektör HİÇ YÜKLENMEZ (drone_yki.py) ve güdüm
+#   GPS'te kalır: kamera o uçuşun HİÇBİR kararına girmez. Yine de zorunlu
+#   sayılınca liste asla "hazır" olamıyordu (6/8) ve panel OTONOM düğmesini
+#   SEBEPSİZ kilitliyordu. Sahada tam bu yaşandı: operatör düğmeye bastı,
+#   hiçbir şey olmadı, sebebini de göremedi — çünkü `disabled` bir düğme
+#   ne tıklama alır ne de mesaj verir.
+#
+#   KURAL: bir maddenin ZORUNLULUĞU, O UÇUŞUN YAPILANDIRMASINDAN gelir.
+#
+#   ⚠ GÖRSEL UÇUŞTA İKİSİ DE ZORUNLU KALIR. `--gorsel` istendiyse kamerasız
+#     otonoma geçmek, göremeyen bir aracı hedefe yollamaktır. Yani bu
+#     gevşetme kendini kötüye kullandırmaz: görseli isteyen, kamerayı da
+#     kanıtlamak zorundadır.
+GORSEL_MADDELERI = ("kamera", "gorsel")
+
 #: eşikler — hepsi ölçülmüş/şartname değerleri
 UYDU_MIN = 10
 HEDEF_MAX_YAS_S = 1.5          # hedef.py MAX_YAS_S ile aynı olmalı
@@ -90,15 +106,24 @@ def degerlendir(d):
     sonuc["kumanda"] = (bool(k.get("kmd_takili")),
                         "" if k.get("kmd_takili") else "kumanda bulunamadı")
 
+    gorsel_ucus = bool(d.get("gorsel_aktif"))
     maddeler = []
     hazir = True
     for anahtar, baslik, zorunlu, aciklama in MADDELER:
         ok, notu = sonuc.get(anahtar, (False, "bilinmiyor"))
+        if anahtar in GORSEL_MADDELERI and not gorsel_ucus:
+            zorunlu = False
+            if not ok:
+                notu = "bu uçuşta gerekmiyor — görsel güdüm kapalı"
         maddeler.append({"anahtar": anahtar, "baslik": baslik, "ok": bool(ok),
                          "not": notu, "zorunlu": zorunlu,
                          "aciklama": aciklama})
         if zorunlu and not ok:
             hazir = False
+    eksik = [m for m in maddeler if m["zorunlu"] and not m["ok"]]
     return {"maddeler": maddeler, "hazir": hazir,
-            "kalan": [m["anahtar"] for m in maddeler
-                      if m["zorunlu"] and not m["ok"]]}
+            "gorsel_ucus": gorsel_ucus,
+            "kalan": [m["anahtar"] for m in eksik],
+            # okunur hâli: operatör onay kutusunda ANAHTAR değil CÜMLE görsün
+            "kalan_metin": [("%s — %s" % (m["baslik"], m["not"])).rstrip(" —")
+                            for m in eksik]}

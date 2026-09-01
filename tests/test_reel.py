@@ -2750,18 +2750,54 @@ def test_R108_on_ucus_listesi_HAKEMI_DEGISTIRMEZ():
     assert "kontrol_listesi" not in ko, (
         "ön uçuş listesi HAKEME sızmış — dört şartlı emniyet kapısı R39 ile "
         "kanıtlandı, beşinci şart eklenmez")
-    # panel kilidi + zorlama yolu
-    # ⛔ ETİKET DEĞİL DAVRANIŞ: değişken adı yeniden düzenlemede değişir
-    #   (`kl` -> `kls`), ama OTONOM düğmesinin listeye BAĞLI olması değişmez.
+    # ⛔⛔ ÖLÜ DÜĞME YASAK — BU BEKÇİ TERSİNE ÇEVRİLDİ (2026-09-01).
+    #   ESKİ HÂLİ tam TERSİNİ şart koşuyordu: `bOto.disabled` ön uçuş
+    #   listesine bağlansın. O şart sahada bize bir yarışma hakkına mal
+    #   oldu: kamera ve `--gorsel` maddeleri GPS uçuşunda da zorunlu
+    #   sayıldığı için liste asla hazır olamıyordu (6/8), düğme
+    #   TIKLANAMAZ hâle geliyordu ve tıklamak ne hareket ne de SEBEP
+    #   üretiyordu. Kaçış yolu (çift tıkla zorla) hiçbir yerde yazmıyordu.
+    #   YENİ DEĞİŞMEZ: düğme HER ZAMAN tıklanabilir; koruma GÖRÜNÜR
+    #   onaydır (eksik maddeler tek tek sayılır). Kaza koruması korunur,
+    #   körlük kalkar. Hakemin DÖRT ŞARTI değişmedi (aşağıda ayrıca sınanır).
     p = open(os.path.join(REEL, "gercek", "panel.py"), encoding="utf-8").read()
     assert "d.kontrol" in p, "panel kontrol listesini okumuyor"
     bas = p.index("const bOto=document.getElementById(\"b_otonom\")")
-    govde = p[bas:bas + 500]
-    assert "bOto.disabled" in govde and ".hazir" in govde, (
-        "OTONOM düğmesi kontrol listesine göre kilitlenmiyor")
-    assert "_klZorla" in govde, "zorlama bayrağı kilide girmiyor"
+    govde = p[bas:bas + 900]
+    assert "bOto.disabled=false" in govde.replace(" ", ""), (
+        "OTONOM düğmesi yine ÖLÜ olabilir — `disabled` açıkça false "
+        "yapılmalı. Ölü düğme sahada bir yarışma hakkına mal oldu.")
+    assert "kls.kalan" in govde, (
+        "düğme eksik maddeleri göstermiyor — operatör sebebi göremez")
+    # tıklama listeyi SORMALI: kaza koruması kilitten ONAYA taşındı
+    ob = p.index('document.getElementById("b_otonom").onclick')
+    tik = p[ob:ob + 1400]
+    assert "kontrol" in tik and "confirm(" in tik and "_klZorla" in tik, (
+        "OTONOM tıklaması ön uçuş listesini sormuyor — tek tıkla otonoma "
+        "geçilebilir, kaza koruması yok")
     assert "_klZorla" in p and "ondblclick" in p, (
         "zorlama yolu yok — yanlış kırmızı yanan madde otonomdan mahrum bırakır")
+
+    # ⛔ ZORUNLULUK UÇUŞUN YAPILANDIRMASINDAN GELİR — İKİ YÖNLÜ SINANIR.
+    #   Görsel KAPALIYKEN kamera/görsel maddeleri listeyi DÜŞÜRMEZ (yoksa
+    #   GPS güdüm uçuşunda otonom hiç açılamaz), ama görsel AÇIKKEN ikisi
+    #   de zorunludur — yani gevşetme kendini kötüye kullandırmaz.
+    gpsce = KL.degerlendir({
+        "arac": {"canli": True, "uydu": 14, "koken": True, "pil_v": 24.1},
+        "hedef": {"var": True, "n_paket": 500},
+        "kamera": {"acik": False}, "komut": {"kmd_takili": True},
+        "gorsel_aktif": False})
+    assert gpsce["hazir"] is True and gpsce["kalan"] == [], (
+        "GPS güdüm uçuşunda kamera yokluğu listeyi düşürüyor — panel "
+        "OTONOM'u sebepsiz kilitler (sahada yaşandı)")
+    gorselde = KL.degerlendir({
+        "arac": {"canli": True, "uydu": 14, "koken": True, "pil_v": 24.1},
+        "hedef": {"var": True, "n_paket": 500},
+        "kamera": {"acik": False}, "komut": {"kmd_takili": True},
+        "gorsel_aktif": True})
+    assert not gorselde["hazir"] and "kamera" in gorselde["kalan"], (
+        "görsel güdüm İSTENDİĞİ hâlde kamerasız 'hazır' deniyor — "
+        "göremeyen aracı hedefe yollamak demektir")
 
 
 def test_R110_MODELIN_HAM_CIKTISI_her_zaman_ekrana_ulasir():
@@ -4024,6 +4060,12 @@ def test_R128_TELEMETRI_SUNUCUNUN_GERCEK_SEMASINI_kullaniyor():
         def hiz():
             return 12.3
 
+        @staticmethod
+        def gps_konum():
+            # ⛔ Çerçevenin `dereceye` çıktısından KASTEN FARKLI: paketin
+            #   HAM GPS'i kullandığını kanıtlamak için.
+            return 41.1234567, 29.7654321
+
     class _Ks:
         durum = {"kaynak": "OTONOM"}
 
@@ -4057,6 +4099,27 @@ def test_R128_TELEMETRI_SUNUCUNUN_GERCEK_SEMASINI_kullaniyor():
     assert abs(paket["iha_yonelme"] - 210.0) < 0.5
     assert abs(paket["iha_hiz"] - 12.3) < 0.05
     assert paket["iha_mod"] is True, "otonomdayken mod False geldi"
+
+    # --- ⛔ KÖKEN KURULMAMIŞKEN DE KONUM SIFIR OLMAMALI (2026-09-01) ---
+    #   YAŞANDI: haberleşme testinde sunucuya enlem/boylam 0.0 gitti.
+    #   Sebep: konum yerel metre çerçevesinden geri çevriliyordu ve
+    #   panelde KÖKEN KUR'a basılmadığı için çerçeve hazır değildi.
+    #   Aracın GPS'i varken paket ASLA sıfır konum taşımamalı.
+    class _CerceveYok:
+        hazir = False
+
+        @staticmethod
+        def dereceye(x, y, z):
+            raise AssertionError("köken yokken dereceye çağrılmamalı")
+
+    class _GbKokensiz(_Gb):
+        cerceve = _CerceveYok()
+
+    p2 = drone_yki._telemetri(_GbKokensiz(), _Ks(), None)
+    assert abs(p2["iha_enlem"] - 41.1234567) < 1e-6, (
+        "köken kurulmadan enlem %r gitti — GPS varken sıfır/yanlış konum "
+        "göndermek yarışmada puanı sessizce sıfırlar" % p2["iha_enlem"])
+    assert abs(p2["iha_boylam"] - 29.7654321) < 1e-6
     assert paket["iha_kilitlenme"] is True
     assert (paket["hedef_merkez_X"], paket["hedef_merkez_Y"],
             paket["hedef_genislik"], paket["hedef_yukseklik"]) == (300, 230, 30, 43)

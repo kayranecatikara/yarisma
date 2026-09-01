@@ -65,6 +65,21 @@ class SunucuIstemcisi:
         self.sayac = {"gonderilen": 0, "hata": 0, "kilit_paketi": 0,
                       "hiz_ihlali": 0}
         self._son_gonderim = 0.0
+        # ⭐ SON HAM YANIT (2026-09-01). Sunucu telemetriyi KABUL ederken
+        #   (HTTP 200, hata=0) hedef listesi boş geliyordu ve sebebini
+        #   ayırt edemiyorduk: liste GERÇEKTEN boş mu, yoksa sunucu onu
+        #   BAŞKA BİR ANAHTAR ADI altında mı gönderiyor? İkincisi sessiz
+        #   bir hatadır — gönderme tarafında tam bu tuzağa düşmüştük
+        #   (bekçi R128: 14 alandan 11'inin adı tutmuyordu, sunucu 200
+        #   dönerken her alanı SIFIR okuyordu).
+        #   Paneli durdurup ayrı bir araç çalıştırmak 2 Hz sınırını aşıyor,
+        #   o yüzden yanıt BURADA saklanır ve `durum()` ile dışarı verilir.
+        self.son_yanit = None
+        #: ⭐ SON GÖNDERİLEN PAKET (2026-09-01). Hakemler "sıfır veri
+        #   basıyorsunuz" dedi ve biz ne gönderdiğimizi panelden
+        #   GÖREMİYORDUK; tahminle tartıştık. Artık gönderilen paket
+        #   olduğu gibi panele çıkar.
+        self.son_gonderilen = None
         self._kilit_kuyrugu = []
         self._kuyruk_kilidi = threading.Lock()
 
@@ -159,14 +174,28 @@ class SunucuIstemcisi:
                 time.sleep(0.05)
                 continue
             try:
-                yanit = self._istek("/api/telemetri_gonder", self.telem())
+                paket_t = self.telem()
+                self.son_gonderilen = paket_t
+                yanit = self._istek("/api/telemetri_gonder", paket_t)
                 self._son_gonderim = t0
                 self.sayac["gonderilen"] += 1
                 self.baglandi = True
                 if isinstance(yanit, dict):
-                    if "sunucu_saati" in yanit:
-                        self.sunucu_saati = yanit["sunucu_saati"]
-                    for h in yanit.get("hedef_iha_verileri", []) or []:
+                    self.son_yanit = yanit
+                    # ⛔ SUNUCUNUN GERÇEK ANAHTARLARI (2026-09-01, ham yanıt
+                    #   basılarak görüldü): saat `sunucusaati`, hedef listesi
+                    #   `konumBilgileri`. Dokümanın PDF'i `sunucu_saati` ve
+                    #   `hedef_iha_verileri` diyor — İKİSİ DE TUTMUYORDU ve
+                    #   hata vermiyordu: hedef sessizce hiç görünmüyordu.
+                    #   PDF adları geriye dönük kabul edilir (sahte sunucu,
+                    #   birim testler).
+                    for ad in ("sunucusaati", "sunucu_saati"):
+                        if ad in yanit:
+                            self.sunucu_saati = yanit[ad]
+                            break
+                    liste = (yanit.get("konumBilgileri")
+                             or yanit.get("hedef_iha_verileri") or [])
+                    for h in liste:
                         self.hedef.besle(h)
             except urllib.error.HTTPError as e:
                 self.sayac["hata"] += 1
@@ -189,6 +218,15 @@ class SunucuIstemcisi:
             time.sleep(uyku if uyku > 0 else 0.01)
 
     def durum(self):
+        y = self.son_yanit
         return {"baglandi": self.baglandi, "adres": self.cfg.ADRES,
-                "hata": self.son_hata, "saat": self.sunucu_saati,
+                "son_hata": self.son_hata, "saat": self.sunucu_saati,
+                # ⭐ TEŞHİS: sunucunun son yanıtı. `yanit_anahtarlari` boşsa
+                #   sunucu bize düz bir cevap dönüyor; içinde tanımadığımız
+                #   bir anahtar varsa hedef listesi ORADA olabilir.
+                "gonderilen_paket": self.son_gonderilen,
+                "yanit_anahtarlari": (sorted(y.keys())
+                                      if isinstance(y, dict) else None),
+                "yanit_ham": (json.dumps(y, ensure_ascii=False)[:800]
+                              if y is not None else None),
                 **self.sayac}
