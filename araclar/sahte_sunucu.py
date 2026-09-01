@@ -443,7 +443,9 @@ HARITA = r"""<!doctype html><meta charset=utf-8>
    <div class=ipucu id=doyum></div>
  </div>
  <div class=kutu>
+   <div class=sat><b>kip (panel)</b><span id=kip>—</span></div>
    <div class=sat><b>kaynak</b><span id=kaynak>—</span></div>
+   <div class=sat><b>⛔ sebep</b><span id=sebep>—</span></div>
    <div class=sat><b>güdüm</b><span id=gudum>—</span></div>
    <div class=sat><b>arm</b><span id=arm>—</span></div>
    <div class=sat><b>burun (yaw)</b><span id=yaw>—</span></div>
@@ -540,8 +542,12 @@ async function tik(){
   try{ D=await (await fetch("/api/harita")).json(); }catch(e){ }
   const a=D.arac, h=D.hedef, p=D.panel||{}, oc=p.oto_cubuk, du=p.durus||{};
   const g=(i,v)=>document.getElementById(i).textContent=v;
-  g("kaynak",(p.komut||{}).kaynak||"—");
-  g("gudum",(p.gudum||{}).durum||"—");
+  const K=p.komut||{};
+  g("kip",K.kip||"—");
+  g("kaynak",K.kaynak||"—");
+  g("sebep",K.sebep&&K.sebep!="-"?K.sebep:"—");
+  const G=p.gudum||{};
+  g("gudum",(G.durum||"—")+((G.tik&&G.tik!=G.durum)?("  ⛔ "+G.tik):""));
   g("arm",(p.komut||{}).arm===true?"ARM":"disarm");
   g("yaw",a?a.yaw.toFixed(1)+"°":"—");
   document.getElementById("irtd").innerHTML =
@@ -610,11 +616,27 @@ async function tik(){
     } else {
       g("kk","—"); g("gd","—"); g("yk","—"); g("yfark","—");
       e.textContent="—"; e.className="buyuk";
-      document.getElementById("yorum").textContent=
+      // ⛔ TEŞHİS: hakemin `sebep` alanı hangi şartın düştüğünü SÖYLER.
+      //   Genel bir "KÖKEN KUR + OTONOM gerekli" metni operatörü kör
+      //   bırakıyordu (2026-09-02'de sahada yaşandı).
+      const S1={
+        "gudum_bayat":"güdüm taze setpoint ÜRETMİYOR. En sık sebebi "+
+          "KÖKENİN KURULMAMASI (panelde <code>güdüm</code> alanı "+
+          "<code>KOKEN_YOK</code> yazar). Telemetri de ölmüş olabilir "+
+          "(<code>BAGLANTI_YOK</code>).",
+        "pilot_vetosu":"pilot izni YOK. Panel <code>izin</code> "+
+          "göndermiyor — MANUEL'e basıp tekrar OTONOM'a bas.",
+        "teslim_suresi":"3 saniyedir hiçbir insan girdisi yok "+
+          "(panel sekmesi arka planda olabilir).",
+        "paket_kesildi":"ne panel ne kumanda var — RC KESİLDİ."};
+      const K2=p.komut||{};
+      document.getElementById("yorum").innerHTML=
         p.hata ? ("panel okunamıyor: "+p.hata)
-        : ((p.komut||{}).kaynak!=="OTONOM"
-           ? "güdüm komut üretmiyor — panelde KÖKEN KUR + OTONOM gerekli"
-           : "komut yok");
+        : (K2.kip!=="OTONOM"
+           ? "⛔ panel kipi <code>"+(K2.kip||"?")+"</code> — önce panelde "+
+             "<b>OTONOM</b>'a bas."
+           : (S1[K2.sebep] || ("kaynak="+(K2.kaynak||"?")+
+                               " sebep="+(K2.sebep||"?"))));
     }
   }
   ciz();

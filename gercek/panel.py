@@ -223,8 +223,17 @@ def _durum():
         d["dikey"] = {"aktif": dk.aktif, "pasif": dk.n_pasif_cagri,
                       **{a: b for a, b in dk.tani.items()}}
     if by is not None:
+        # ⛔ TİK ATLANDIYSA SEBEBİ `tani`DE — VE PANELDE GÖRÜNMÜYORDU.
+        #   `by.durum` KALICI bir alandır (KALKIS/ISTASYON/GORSEL) ve tik
+        #   atlansa bile DEĞİŞMEZ. Oysa `adim()` erken dönerse sebebi
+        #   `tani["durum"]`e yazar: KOKEN_YOK / BAGLANTI_YOK / HEDEF_YOK.
+        #   2026-09-02'de sahada bu körlük yaşandı: panel "KALKIS" yazarken
+        #   güdüm aslında hiç komut üretmiyordu ve operatör sebebi
+        #   göremiyordu.
+        _tn = getattr(by, "tani", None) or {}
         d["gudum"] = {"durum": getattr(by, "durum", "-"),
-                      "faz": getattr(by, "faz", "-")}
+                      "faz": getattr(by, "faz", "-"),
+                      "tik": _tn.get("durum")}
     # ⭐ OPTİK SABİTLERİ ve MENZİL KAPILARI — panel menzili METRE olarak
     #   yazabilsin diye. ⛔ JS'e sabit YAZILMAZ: ayar env'den değişiyor
     #   (DOW_OPTIK_MENZIL_C) ve sabit yazmak paneli YALANCI yapar.
@@ -1084,7 +1093,10 @@ function gosterim(d){
           "   kanal "+(di.kanallar||[]).join(",")+
           "  <span class=sonuk>ALT HOLD + POS HOLD</span>")
         :"kapalı"))+
-    sat("güdüm",(g.durum||"—")+" / "+(g.faz||"—"))+
+    sat("güdüm",(g.durum||"—")+" / "+(g.faz||"—")+
+        // ⛔ tik atlandıysa SEBEBİ göster — `durum` kalıcıdır, yalan söyler
+        ((g.tik && g.tik!=g.durum)
+          ? ('  <b class=kotu2>⛔ '+g.tik+'</b>') : ""))+
     sat("kuzey / doğu",(ko.kuzey??"—")+" / "+(ko.dogu??"—")+" m")+
     sat("yükseklik",(ko.yukari??"—")+" m")+
     sat("hız",(hz.yatay??"—")+" m/s   ↕ "+(hz.dikey??"—"))+
