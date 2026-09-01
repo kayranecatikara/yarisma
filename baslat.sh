@@ -76,7 +76,14 @@ export DOW_CEV_Y_ISARET="${DOW_CEV_Y_ISARET:-+1.0}"
 # ⭐ OTONOM KALKIŞ AÇIK (kullanıcı kararı 2026-08-31): araç ARM edildikten
 #   sonra GÖREVİ BAŞLAT'a basılınca KALKIS fazında dikey tırmanır (yatay
 #   komut YOK), hedef irtifaya varınca ISTASYON'a geçip hedefe yönelir.
-export DOW_KALKIS_ALT="${DOW_KALKIS_ALT:-40}"
+# ⭐ 40 -> 35 m (kullanıcı gözlemi 2026-09-01): hedef İHA 35-45 m bandında,
+#   irtifasını en fazla ~1 m oynatarak uçuyor. İstasyon noktası hedefin
+#   6 m altında kurulduğu için (ISTASYON_MENZIL 8 × ALT_ORAN 0.75) istasyon
+#   irtifası 29-39 m'ye düşüyor. 40 m'ye tırmanmak, aracı kalkıştan hemen
+#   sonra bir de ALÇALTMAK demekti — üstelik dikey kapalı döngü (dikey.py)
+#   HİÇ UÇMAMIŞ durumda. 35 m aracı doğrudan istasyon bandının ortasına
+#   bırakır ve dikey döngünün ilk uçuşta yapacak işi kalmaz.
+export DOW_KALKIS_ALT="${DOW_KALKIS_ALT:-35}"
 # ⛔⛔ TIRMANMA HIZI 12 -> 3 m/s. Dikey kapalı döngü (`dikey.py`) HİÇ
 #   UÇMADI (panelde ölçüldü: aktif=false, 3470 pasif çağrı). 12 m/s ile
 #   döngü salınırsa araç yerden fırlar ya da çakılır. 3 m/s'de 40 metreye

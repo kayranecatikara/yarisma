@@ -74,6 +74,23 @@ SUTUNLAR = [
     ("hedef_kuzey",    "hedef_ham_konum.kuzey"),
     ("hedef_dogu",     "hedef_ham_konum.dogu"),
     ("hedef_uzaklik",  "hedef_ham_konum.uzaklik"),
+    # ⭐ HEDEFİN İRTİFASI — DİKEY KOMUTUMUZU SÜREN DEĞER, kaydı YOKTU.
+    #   2026-09-01: kullanıcı hedefin 35-45 m'de neredeyse sabit uçtuğunu
+    #   gözledi. Bunu SAYIYLA doğrulamak ve dikey gürültüyü ölçmek istedik
+    #   ama irtifa hiçbir yere yazılmıyordu — yatay için 5 sütun var, dikey
+    #   için sıfır. Ölçemediğimiz şeyi ayarlayamayız.
+    ("hedef_irtifa",   "hedef.ham_irtifa"),
+    ("hedef_hiz",      "hedef.ham_hiz"),
+    # ⭐ GNSS SÜZGECİ MEKANİZMA SÜTUNLARI (CLAUDE.md §5.1).
+    #   Süzgeç ÇALIŞIYOR MU sorusunu uçuştan SONRA cevaplayabilmek için.
+    #   `reddedilen` hızla artıyorsa R gerçek bozulmadan küçüktür
+    #   (README §5'in saha ayarı: 200 -> 400 -> 800). Çevrimdışı kayıt
+    #   tekrarında R=200'de 371/1104 (%34) reddedildiği ÖLÇÜLDÜ; gerçek
+    #   uçuşta da öyle mi, bu sütun söyleyecek.
+    ("gnss_reddedilen", "gnss.reddedilen"),
+    ("gnss_suzuldu",    "gnss.suzuldu"),
+    ("gnss_ham_dondu",  "gnss.ham_dondu"),
+    ("gnss_duzeltme_m", "gnss.duzeltme_m"),
     # --- görüş: KABUL EDİLEN kutu ---
     ("kutu_cx",        "kutu.0"),
     ("kutu_cy",        "kutu.1"),
