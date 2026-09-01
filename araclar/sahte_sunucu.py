@@ -65,6 +65,10 @@ class Hedef:
                    çevirip çevirmediğine bakılır.
       "sabit"    : tek bir kerteriz/uzaklıkta durur. En sade geometri.
       "daire"    : merkez etrafında daire çizer (eski davranış).
+      "elle"     : ⭐ HEDEFİ SEN SÜRÜKLERSİN. `/harita` sayfasında hedefi
+                   fareyle gezdirirsin; güdümün ürettiği yaw/pitch/roll
+                   komutu ANINDA yanında görünür. Pervanesiz yer testi
+                   için: "drone hedefe doğru komut üretiyor mu?"
     """
 
     def __init__(self, desen="rastgele", irtifa=80.0, uzaklik=250.0,
@@ -80,6 +84,9 @@ class Hedef:
         self.M = self.N = self.cos0 = None
         self._donem = -1
         self._donem_bilgi = None
+        #: "elle" deseni: [kuzey_m, dogu_m] — /api/elle ile yazılır
+        self.elle = [200.0, 0.0]
+        self.elle_hiz = 0.0
 
     def merkez_kur(self, enlem, boylam):
         """Referans noktayı kur — hedef bundan sonra var olur."""
@@ -120,6 +127,10 @@ class Hedef:
         """Şu anki dönemin (kerteriz°, uzaklık m) özeti — rapor için."""
         if not self.hazir:
             return None
+        if self.desen == "elle":
+            import math as _m
+            return ((_m.degrees(_m.atan2(self.elle[1], self.elle[0])) + 360) % 360,
+                    _m.hypot(self.elle[0], self.elle[1]))
         if self.desen == "sabit":
             return self.kerteriz, self.uzaklik
         if self.desen == "daire":
@@ -136,6 +147,11 @@ class Hedef:
             w = self.V / self.R                   # açısal hız (rad/s)
             x, y = self.R * math.cos(w * t), self.R * math.sin(w * t)
             hiz = self.V
+        elif self.desen == "elle":
+            # ⛔ SÜRÜKLENEN NOKTA. Hız, sürükleme hızından hesaplanır ki
+            #   güdümün hedef-hız kestirimi (ileri besleme) anlamlı olsun.
+            x, y = self.elle[0], self.elle[1]
+            hiz = self.elle_hiz
         elif self.desen == "sabit":
             k = math.radians(self.kerteriz)
             x, y = self.uzaklik * math.cos(k), self.uzaklik * math.sin(k)
@@ -199,6 +215,11 @@ class Sunucu(BaseHTTPRequestHandler):
     kadi = "hamidiye"
     sifre = "Z8vN1cR5tY"
     hedef_takim = 1
+    #: bize gelen SON telemetri (harita sayfası aracın yerini bundan bilir)
+    son_telem = {}
+    #: GCS panelinden yansıtılan durum (arka planda 5 Hz çekilir)
+    panel_durum = {}
+    panel_adres = "http://127.0.0.1:8810"
     sayac = {"giris": 0, "telemetri": 0, "red_bicim": 0, "red_hiz": 0,
              "kilit": 0, "saat": 0, "merkez_bekle": 0}
     _son_telem = [0.0]
@@ -228,6 +249,33 @@ class Sunucu(BaseHTTPRequestHandler):
         if self.path == "/api/sunucusaati":
             Sunucu.sayac["saat"] += 1
             return self._yaz(200, self._saat())
+        if self.path in ("/", "/harita"):
+            ham = HARITA.encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(ham)))
+            self.end_headers()
+            self.wfile.write(ham)
+            return
+        if self.path == "/api/harita":
+            h = Sunucu.hedef
+            t = Sunucu.son_telem or {}
+            d = {"hazir": h.hazir, "desen": h.desen,
+                 "hedef": {"kuzey": h.elle[0], "dogu": h.elle[1],
+                           "irtifa": h.irtifa},
+                 "panel": Sunucu.panel_durum}
+            # aracın YEREL konumu: bize bildirdiği GPS - merkez
+            if h.hazir and t.get("iha_enlem"):
+                try:
+                    dk = math.radians(float(t["iha_enlem"]) - h.e0) * h.M
+                    dd = (math.radians(float(t["iha_boylam"]) - h.b0)
+                          * h.N * h.cos0)
+                    d["arac"] = {"kuzey": dk, "dogu": dd,
+                                 "yaw": float(t.get("iha_yonelme") or 0.0),
+                                 "irtifa": float(t.get("iha_irtifa") or 0.0)}
+                except (TypeError, ValueError):
+                    pass
+            return self._yaz(200, d)
         self._yaz(404)
 
     def do_POST(self):
@@ -267,6 +315,7 @@ class Sunucu(BaseHTTPRequestHandler):
                 Sunucu.sayac["red_bicim"] += 1
                 return self._yaz(204)
             Sunucu.sayac["telemetri"] += 1
+            Sunucu.son_telem = g
             # ⭐ MERKEZİ AVCI DRONUN KENDİ KONUMUNDAN KUR (--merkez oto).
             #   (0,0) gelen paket GEÇERLİ SAYILMAZ: o, köken kurulmadan
             #   ya da GPS fix'siz gönderilen paketin imzasıdır — tam da
@@ -305,6 +354,26 @@ class Sunucu(BaseHTTPRequestHandler):
                     "iha_irtifa": round(irt, 1), "iha_hizi": round(hiz, 1),
                     "zaman_farki": int(Sunucu.bozucu.gecikme * 1000)}]})
 
+        if self.path == "/api/elle":
+            # ⛔ Hedefi HARİTADAN sürüklemek. Hız, iki sürükleme arasındaki
+            #   yer değiştirmeden hesaplanır — güdümün ileri beslemesi
+            #   (hedef hızı) anlamlı bir sayı görsün diye.
+            h = Sunucu.hedef
+            try:
+                k = float(g.get("kuzey", h.elle[0]))
+                dg = float(g.get("dogu", h.elle[1]))
+            except (TypeError, ValueError):
+                return self._yaz(400)
+            simdi = time.monotonic()
+            onceki = getattr(h, "_elle_t", None)
+            if onceki is not None:
+                dt = max(simdi - onceki, 1e-3)
+                h.elle_hiz = min(80.0, math.hypot(k - h.elle[0],
+                                                  dg - h.elle[1]) / dt)
+            h._elle_t = simdi
+            h.elle[0], h.elle[1] = k, dg
+            return self._yaz(200, {"ok": True})
+
         if self.path == "/api/kilitlenme_bilgisi":
             Sunucu.sayac["kilit"] += 1
             return self._yaz(200, {"ok": True})
@@ -312,14 +381,236 @@ class Sunucu(BaseHTTPRequestHandler):
         self._yaz(404)
 
 
+# ============================================================================
+#  HARİTA SAYFASI — hedefi SÜRÜKLE, güdümün ürettiği komutu ANINDA gör
+# ============================================================================
+# ⛔ NİYE VAR (kullanıcı isteği 2026-09-02): pervaneler alındı, uçuş yasak.
+#   Yerde kanıtlanabilecek en değerli şey şu: "hedef şurada olsa, drone
+#   oraya doğru mu komut üretir?" Bu sayfa hedefi fareyle gezdirtir ve
+#   güdümün O ANDA ürettiği yaw/pitch/roll komutunu dünya çerçevesine
+#   çevirip hedefin kerteriziyle YAN YANA koyar.
+#
+# ⛔ TAM YARIŞMA YOLU KULLANILIR: hedef, gerçek sunucu şemasıyla
+#   /api/telemetri_gonder yanıtında gider; GCS onu normal yoldan alır.
+#   Değişen tek şey hedefin NEREDEN geldiğidir.
+HARITA = r"""<!doctype html><meta charset=utf-8>
+<title>Hedef Sürükle — güdüm ne komut veriyor?</title>
+<style>
+ body{background:#0e1116;color:#dbe3ee;font:13px/1.5 system-ui,sans-serif;
+      margin:0;display:flex;gap:14px;padding:14px}
+ canvas{background:#141a22;border:1px solid #2a3441;border-radius:8px;
+        cursor:crosshair}
+ .yan{min-width:330px}
+ h1{font-size:15px;margin:0 0 10px;color:#9fb4cc;font-weight:600}
+ .kutu{background:#141a22;border:1px solid #2a3441;border-radius:8px;
+       padding:10px 12px;margin-bottom:10px}
+ .sat{display:flex;justify-content:space-between;padding:2px 0}
+ .sat b{color:#9fb4cc;font-weight:500}
+ .buyuk{font-size:30px;font-weight:700;text-align:center;padding:6px 0}
+ .iyi{color:#4ade80}.orta{color:#fbbf24}.kotu{color:#f87171}
+ .ipucu{color:#7c8ba1;font-size:12px;line-height:1.6}
+ code{background:#1c2430;padding:1px 5px;border-radius:4px;color:#9fb4cc}
+</style>
+<canvas id=c width=660 height=660></canvas>
+<div class=yan>
+ <h1>Hedefi sürükle — komut nereyi gösteriyor?</h1>
+ <div class=kutu>
+   <div class=sat><b>gereken dönüş</b><span id=gd>—</span></div>
+   <div class=sat><b>güdümün yaw komutu</b><span id=yk>—</span></div>
+   <div class=buyuk id=fark>—</div>
+   <div class=ipucu id=yorum>bekleniyor…</div>
+ </div>
+ <div class=kutu>
+   <div class=sat><b>hedefin kerterizi</b><span id=hk>—</span></div>
+   <div class=sat><b>komutun kerterizi</b><span id=kk>—</span></div>
+   <div class=sat><b>fark (yön)</b><span id=yfark>—</span></div>
+   <div class=ipucu id=doyum></div>
+ </div>
+ <div class=kutu>
+   <div class=sat><b>kaynak</b><span id=kaynak>—</span></div>
+   <div class=sat><b>güdüm</b><span id=gudum>—</span></div>
+   <div class=sat><b>arm</b><span id=arm>—</span></div>
+   <div class=sat><b>burun (yaw)</b><span id=yaw>—</span></div>
+   <div class=sat><b>uzaklık</b><span id=uz>—</span></div>
+ </div>
+ <div class=kutu>
+   <div class=sat><b>çubuk pitch (ileri)</b><span id=cp>—</span></div>
+   <div class=sat><b>çubuk roll (sağ)</b><span id=cr>—</span></div>
+   <div class=sat><b>çubuk yaw</b><span id=cy>—</span></div>
+   <div class=sat><b>çubuk throttle</b><span id=ct>—</span></div>
+ </div>
+ <div class=kutu ipucu>
+   <div class=ipucu>
+   <b>⛔ YERDE ASIL ÖLÇÜT: DÖNÜŞ YÖNÜ.</b> Güdüm "burnunu çevir, sonra
+   düz git" stratejisi kullanır. Yerdeki araç DÖNEMEZ ve hız hatası hep
+   azami olduğu için <code>pitch</code> daima +1.00'de DOYAR — o yüzden
+   yeşil ok yerde aracın BURNUNU gösterir, hedefi değil. Bu normaldir.<br><br>
+   <b>Bakılacak şey:</b> hedefi sağa koyunca yaw komutu <b>+</b>, sola
+   koyunca <b>−</b> olmalı ve büyüklüğü açıyla artmalı. Büyük yazı bunu
+   söyler.<br><br>
+   <b>Ok da doğrulanabilir:</b> aracı elinde çevirip burnunu hedefe
+   doğrult — o zaman doyum sorun olmaz, yeşil ok sarı çizgiyle
+   ÇAKIŞMALIDIR.<br><br>
+   ⛔ Araç DISARM ve pervanesiz olmalı.<br>
+   ⛔ Panelde <code>KÖKEN KUR</code> → <code>OTONOM</code> basılı olmalı.
+   </div>
+ </div>
+</div>
+<script>
+const c=document.getElementById("c"), x=c.getContext("2d");
+const W=c.width, H=c.height, MERKEZ={x:W/2,y:H/2};
+let OLCEK=0.55;            // piksel / metre
+let D={}, surukle=false, sonPost=0;
+function m2p(k,d){ return {x:MERKEZ.x+d*OLCEK, y:MERKEZ.y-k*OLCEK}; }
+function p2m(px,py){ return {kuzey:(MERKEZ.y-py)/OLCEK, dogu:(px-MERKEZ.x)/OLCEK}; }
+function sar(a){ return ((a+180)%360+360)%360-180; }
+
+c.addEventListener("mousedown",e=>{surukle=true;tasi(e);});
+addEventListener("mouseup",()=>surukle=false);
+c.addEventListener("mousemove",e=>{ if(surukle) tasi(e); });
+c.addEventListener("wheel",e=>{ e.preventDefault();
+  OLCEK*=e.deltaY<0?1.15:0.87; OLCEK=Math.max(0.05,Math.min(6,OLCEK)); ciz(); });
+function tasi(e){
+  const r=c.getBoundingClientRect();
+  const m=p2m(e.clientX-r.left, e.clientY-r.top);
+  D.hedef=D.hedef||{}; D.hedef.kuzey=m.kuzey; D.hedef.dogu=m.dogu;
+  ciz();
+  const t=Date.now(); if(t-sonPost<80) return; sonPost=t;
+  fetch("/api/elle",{method:"POST",
+    body:JSON.stringify({kuzey:m.kuzey,dogu:m.dogu})}).catch(()=>{});
+}
+function ok(x0,y0,kert,uzun,renk,kalin){
+  const r=(90-kert)*Math.PI/180;
+  const x1=x0+Math.cos(r)*uzun, y1=y0-Math.sin(r)*uzun;
+  x.strokeStyle=renk; x.fillStyle=renk; x.lineWidth=kalin;
+  x.beginPath(); x.moveTo(x0,y0); x.lineTo(x1,y1); x.stroke();
+  x.beginPath(); x.arc(x1,y1,kalin+2,0,7); x.fill();
+}
+function ciz(){
+  x.clearRect(0,0,W,H);
+  x.strokeStyle="#1f2937"; x.lineWidth=1;
+  for(let m=-2000;m<=2000;m+=50){ const p=m2p(m,0), q=m2p(0,m);
+    x.beginPath(); x.moveTo(0,p.y); x.lineTo(W,p.y); x.stroke();
+    x.beginPath(); x.moveTo(q.x,0); x.lineTo(q.x,H); x.stroke(); }
+  x.fillStyle="#7c8ba1"; x.font="12px system-ui";
+  x.fillText("KUZEY ↑   ·   1 kare = 50 m   ·   tekerlek = yakınlaştır",10,18);
+  const a=D.arac, h=D.hedef; if(!h) return;
+  const ap = a? m2p(a.kuzey,a.dogu) : m2p(0,0);
+  const hp = m2p(h.kuzey,h.dogu);
+  // hedefe giden sarı çizgi
+  x.strokeStyle="#fbbf24"; x.lineWidth=2; x.setLineDash([6,5]);
+  x.beginPath(); x.moveTo(ap.x,ap.y); x.lineTo(hp.x,hp.y); x.stroke();
+  x.setLineDash([]);
+  // hedef
+  x.fillStyle="#fbbf24"; x.beginPath(); x.arc(hp.x,hp.y,9,0,7); x.fill();
+  x.fillStyle="#0e1116"; x.font="bold 11px system-ui";
+  x.fillText("H",hp.x-4,hp.y+4);
+  // araç + burun
+  if(a){
+    ok(ap.x,ap.y,a.yaw,34,"#60a5fa",2);
+    x.fillStyle="#60a5fa"; x.beginPath(); x.arc(ap.x,ap.y,7,0,7); x.fill();
+  }
+  // komut oku
+  const oc=(D.panel||{}).oto_cubuk;
+  if(a && oc && (Math.abs(oc.pitch)>0.02||Math.abs(oc.roll)>0.02)){
+    const y=a.yaw*Math.PI/180;
+    const kn=oc.pitch*Math.cos(y)-oc.roll*Math.sin(y);
+    const dg=oc.pitch*Math.sin(y)+oc.roll*Math.cos(y);
+    const kert=(Math.atan2(dg,kn)*180/Math.PI+360)%360;
+    ok(ap.x,ap.y,kert,120,"#4ade80",3);
+  }
+}
+async function tik(){
+  try{ D=await (await fetch("/api/harita")).json(); }catch(e){ }
+  const a=D.arac, h=D.hedef, p=D.panel||{}, oc=p.oto_cubuk, du=p.durus||{};
+  const g=(i,v)=>document.getElementById(i).textContent=v;
+  g("kaynak",(p.komut||{}).kaynak||"—");
+  g("gudum",(p.gudum||{}).durum||"—");
+  g("arm",(p.komut||{}).arm===true?"ARM":"disarm");
+  g("yaw",a?a.yaw.toFixed(1)+"°":"—");
+  g("cp",oc?oc.pitch.toFixed(3):"—"); g("cr",oc?oc.roll.toFixed(3):"—");
+  g("cy",oc?oc.yaw.toFixed(3):"—");   g("ct",oc?oc.throttle.toFixed(3):"—");
+  if(a&&h){
+    const bk=h.kuzey-a.kuzey, bd=h.dogu-a.dogu;
+    const hk=(Math.atan2(bd,bk)*180/Math.PI+360)%360;
+    g("hk",hk.toFixed(0)+"°");
+    g("uz",Math.hypot(bk,bd).toFixed(0)+" m");
+    const e=document.getElementById("fark");
+    if(oc){
+      // ⭐ BIRINCIL OLCUT: donus yonu. Yerde arac donemez, ama gudumun
+      //   HANGI YONE cevirmek istedigi olculebilir.
+      const ger=sar(hk-a.yaw);                 // + = saga donmeli
+      g("gd",(ger>0?"+":"")+ger.toFixed(0)+"°  ("+(ger>0?"SAĞA":"SOLA")+")");
+      g("yk",(oc.yaw>0?"+":"")+oc.yaw.toFixed(3)+
+             (Math.abs(oc.yaw)<0.02?"  (yok)":"  ("+(oc.yaw>0?"sağa":"sola")+")"));
+      // ⛔ EŞİKLER ÖLÇÜLDÜ (2026-09-02, yumuşak sürükleme, 75 örnek):
+      //   güdüm burnu hedefin ±10°'sinde tutuyor; bu bantta yaw komutu
+      //   ±0.06 mertebesinde titriyor ve İŞARETİ ANLAMSIZ. O yüzden
+      //   "TERS" hükmü YALNIZ belirgin bir açı hatası VE belirgin bir
+      //   komut varken kurulur — yoksa sayfa boşuna alarm verir.
+      if(Math.abs(ger)<12){
+        e.textContent="BURUN HEDEFTE"; e.className="buyuk iyi";
+        document.getElementById("yorum").innerHTML=
+          "burun zaten hedefe dönük — dönüş komutu beklenmez. Hedefi "+
+          "yana sürükleyip yaw komutunun işaretine bak.";
+      } else if(Math.abs(oc.yaw)<0.08){
+        e.textContent="DÖNÜŞ ZAYIF"; e.className="buyuk orta";
+        document.getElementById("yorum").innerHTML=
+          "hedef "+Math.abs(ger).toFixed(0)+"° "+(ger>0?"sağda":"solda")+
+          " ama yaw komutu küçük ("+oc.yaw.toFixed(3)+"). Hedefi biraz "+
+          "daha yana götür; komut açıyla büyümeli.";
+      } else if(Math.sign(oc.yaw)===Math.sign(ger)){
+        e.textContent="✔ DOĞRU YÖN"; e.className="buyuk iyi";
+        document.getElementById("yorum").innerHTML=
+          "hedef "+Math.abs(ger).toFixed(0)+"° "+(ger>0?"sağda":"solda")+
+          ", güdüm de "+(oc.yaw>0?"sağa":"sola")+" dönüyor.";
+      } else {
+        e.textContent="⛔ TERS YÖN"; e.className="buyuk kotu";
+        document.getElementById("yorum").innerHTML=
+          "⛔⛔ hedef "+(ger>0?"SAĞDA":"SOLDA")+" ama güdüm "+
+          (oc.yaw>0?"SAĞA":"SOLA")+" dönüyor. İşaret hatası — "+
+          "<code>yon_testi.py --mod cevir</code> koş.";
+      }
+      // ikincil: dunya yonu (yerde DOYUM yuzunden yaniltici olabilir)
+      const y=a.yaw*Math.PI/180;
+      const kn=oc.pitch*Math.cos(y)-oc.roll*Math.sin(y);
+      const dg=oc.pitch*Math.sin(y)+oc.roll*Math.cos(y);
+      const kk=(Math.atan2(dg,kn)*180/Math.PI+360)%360;
+      g("kk",kk.toFixed(0)+"°");
+      const f=sar(kk-hk);
+      g("yfark",(f>0?"+":"")+f.toFixed(0)+"°");
+      const doy=Math.abs(oc.pitch)>0.98||Math.abs(oc.roll)>0.98;
+      document.getElementById("doyum").innerHTML= doy
+        ? "⚠ çubuk DOYUMDA (pitch/roll ±1.00) — yerde normaldir. Bu "+
+          "haldeyken ok aracın BURNUNU gösterir, hedefi değil."
+        : (Math.abs(f)<20 ? "✔ ok hedefe çakışıyor" : "");
+    } else {
+      g("kk","—"); g("gd","—"); g("yk","—"); g("yfark","—");
+      e.textContent="—"; e.className="buyuk";
+      document.getElementById("yorum").textContent=
+        p.hata ? ("panel okunamıyor: "+p.hata)
+        : ((p.komut||{}).kaynak!=="OTONOM"
+           ? "güdüm komut üretmiyor — panelde KÖKEN KUR + OTONOM gerekli"
+           : "komut yok");
+    }
+  }
+  ciz();
+}
+setInterval(tik,150); tik();
+</script>
+"""
+
+
 def main():
     a = argparse.ArgumentParser(description="Sahte yarışma sunucusu")
     a.add_argument("--port", type=int, default=10001)
+    a.add_argument("--panel", default="http://127.0.0.1:8810",
+                   help="GCS paneli — harita sayfası komutları oradan yansıtır")
     a.add_argument("--merkez", default="oto",
                    help="referans nokta: 'oto' (VARSAYILAN — avcı dronun "
                         "kendi bildirdiği ilk konum) ya da enlem,boylam")
     a.add_argument("--desen", default="rastgele",
-                   choices=("rastgele", "sabit", "daire"),
+                   choices=("elle", "rastgele", "sabit", "daire"),
                    help="rastgele = her --degisim sn'de yeni kerterize "
                         "ışınlanır (YÖNELME TESTİ); sabit = tek nokta; "
                         "daire = merkez etrafında tur")
@@ -348,6 +639,7 @@ def main():
     a = a.parse_args()
 
     Sunucu.hedef_takim = a.takim
+    Sunucu.panel_adres = a.panel
     Sunucu.hedef = Hedef(desen=a.desen, irtifa=a.irtifa, uzaklik=a.uzaklik,
                          kerteriz=a.kerteriz, hiz=a.hiz, degisim=a.degisim,
                          yaricap=a.yaricap, tohum=a.tohum)
@@ -371,7 +663,12 @@ def main():
         print("               ÜRETİLMEZ, 'merkez bekleniyor' sayılır.")
     else:
         print("  MERKEZ     : %s (elle verildi)" % a.merkez)
-    if a.desen == "rastgele":
+    if a.desen == "elle":
+        print("  HEDEF      : ELLE — hedefi SEN sürükleyeceksin")
+        print("               ⭐ HARİTA:  http://127.0.0.1:%d/harita" % a.port)
+        print("               Panelde KÖKEN KUR + OTONOM basılı olmalı,")
+        print("               yoksa güdüm komut üretmez ve ok görünmez.")
+    elif a.desen == "rastgele":
         print("  HEDEF      : RASTGELE — her %g s'de bir yeni kerterize"
               % a.degisim)
         print("               ışınlanır, %g-%g m uzaklıkta doğar,"
@@ -413,6 +710,26 @@ def main():
                   % (time.time() - Sunucu.bozucu.t0, c["giris"], c["telemetri"],
                      c["red_bicim"], c["red_hiz"], c["kilit"], yer))
     threading.Thread(target=rapor, daemon=True).start()
+
+    def panel_cek():
+        """GCS panelini 5 Hz yansıt. ⛔ AYRI İŞ PARÇACIĞI: HTTP işleyicisi
+        panelin yavaşlamasından ETKİLENMEMELİ."""
+        import urllib.request
+        while True:
+            try:
+                with urllib.request.urlopen(
+                        Sunucu.panel_adres + "/api/durum", timeout=1.0) as c:
+                    d = json.loads(c.read().decode())
+                Sunucu.panel_durum = {
+                    "oto_cubuk": d.get("oto_cubuk"), "durus": d.get("durus"),
+                    "komut": {k: (d.get("komut") or {}).get(k)
+                              for k in ("kaynak", "sebep", "arm", "kip")},
+                    "gudum": d.get("gudum"), "konum": d.get("konum"),
+                    "hedef": {"var": (d.get("hedef") or {}).get("var")}}
+            except Exception as e:
+                Sunucu.panel_durum = {"hata": str(e)[:80]}
+            time.sleep(0.2)
+    threading.Thread(target=panel_cek, daemon=True).start()
     try:
         s.serve_forever()
     except KeyboardInterrupt:
