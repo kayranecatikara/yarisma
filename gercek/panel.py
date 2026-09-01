@@ -162,6 +162,17 @@ def _durum():
                           "yaw": round(math.degrees(yw), 1)}
             d["hiz"] = {"yatay": round(math.hypot(vx, vy), 1),
                         "dikey": round(vz, 1)}
+            # ⭐ BURUN vs ROTA — yaw teşhisi (YALNIZ GÖSTERİM, güdüm okumaz).
+            #   Araç düz ileri giderken fark ~0 olmalı. Değilse ya pusula
+            #   bozuk ya da `attitude.yaw` aslında rota taşıyor; ikisi de
+            #   dünya->gövde dönüşümünü bozar (bkz. baglanti.rota()).
+            _rt = gb.rota() if hasattr(gb, "rota") else None
+            if _rt is not None:
+                _rd, _yh = _rt
+                d["durus"]["rota"] = round(_rd, 1)
+                d["durus"]["yer_hizi"] = round(_yh, 1)
+                d["durus"]["burun_rota_fark"] = round(
+                    (math.degrees(yw) - _rd + 180.0) % 360.0 - 180.0, 1)
         except Exception:
             pass
     if hd is not None:
@@ -1069,7 +1080,19 @@ function gosterim(d){
     sat("hız",(hz.yatay??"—")+" m/s   ↕ "+(hz.dikey??"—"))+
     sat("yatış / dikilme",(du.roll??"—")+"° / "+(du.pitch??"—")+"°")+
     sat("yönelme",(du.yaw??"—")+"°")+
-    sat("telemetri yaşı","gps "+(a.yas_gps??"—")+"  duruş "+(a.yas_durus??"—"));
+    sat("telemetri yaşı","gps "+(a.yas_gps??"—")+"  duruş "+(a.yas_durus??"—"))+
+    // ⭐ BURUN vs ROTA — yaw'ın gerçekten BURUN olup olmadığını gösterir.
+    //   Araç DÜZ İLERİ giderken (yer hızı > 2 m/s) fark ~0 olmalı.
+    //   Büyük ve kalıcı fark: pusula bozuk YA DA attitude.yaw aslında
+    //   rota taşıyor. İkisi de dünya->gövde dönüşümünü bozar.
+    //   ⚠ Yan uçarken (kayarak) fark MEŞRU olarak büyür — bu yüzden
+    //     uyarı yalnız düz gidişte anlamlıdır, karar operatörde.
+    sat("burun / rota", (du.yaw??"—")+"°  /  "+(du.rota??"—")+"°"+
+        (du.burun_rota_fark!=null
+          ? ("   fark "+(du.burun_rota_fark>0?"+":"")+du.burun_rota_fark+"°"+
+             ((du.yer_hizi>2 && Math.abs(du.burun_rota_fark)>25)
+               ? " ⚠ DÜZ GİDERKEN AYRIŞIYOR" : ""))
+          : ""));
 
   // ---- HEDEF ----
   // ⭐ MENZİL METRE OLARAK. Kutu boyutundan çıkıyor ve bugüne kadar

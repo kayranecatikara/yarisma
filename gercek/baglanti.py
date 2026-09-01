@@ -179,6 +179,33 @@ class GercekBaglanti(AracArayuzu):
         except (KeyError, TypeError, ValueError):
             return None
 
+    def rota(self):
+        """GPS ROTASI (yer üstünde gidilen yön, derece) + yer hızı (m/s).
+
+        ⛔ ROTA ≠ BURUN — VE BU BİR TEŞHİS ARACIDIR.
+           `rota` GPS'ten türetilir: aracın GERÇEKTEN gittiği yön.
+           `yonelim()[2]` (yaw) ise ATTITUDE çerçevesinden gelen BURUN yönü.
+           Çok rotorlu araç yan uçabildiği için ikisi genelde AYRIŞIR.
+
+           ⭐ AMA ARAÇ DÜZ İLERİ GİDERKEN ÇAKIŞMALIDIR. Çakışmıyorsa iki
+             ihtimal var, ikisi de gövde dönüşümünü bozar:
+               (a) pusula (QMC5883) bozuk/kalibresiz -> yaw kayıyor
+               (b) `attitude.yaw` aslında ROTA'yı taşıyor — rehber "GPS
+                   yoksa heading" diyor (bkz. skydagger.py başlığı). O
+                   hâlde yan uçarken yaw yalan söyler.
+           Bu ayrım ÖLÇÜLMEMİŞTİ; panel artık ikisini yan yana gösteriyor.
+
+        ⚠ GÜDÜM BUNU OKUMAZ. Yalnız panel/teşhis içindir.
+        Döner: (rota_deg, yer_hizi_ms) ya da None (bayat/yok).
+        """
+        g = self._al("gps")
+        if not g:
+            return None
+        try:
+            return float(g["rota_deg"]), float(g["yer_hizi_ms"])
+        except (KeyError, TypeError, ValueError):
+            return None
+
     def yonelim(self):
         """(roll, pitch, yaw) RADYAN — doğrudan CRSF ATTITUDE."""
         a = self._al("durus")
