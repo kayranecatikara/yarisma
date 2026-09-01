@@ -3439,68 +3439,91 @@ def test_R119b_DIKEY_INIS_asamalar_ve_ARM_dokunulmazligi():
 
 
 # ---------------------------------------------------------------- R120
-def test_R120_PILOT_CUBUKLA_DEVRALIR_mandalli_ve_ANAHTARDAN_bagimsiz():
-    """⛔ Pilot çubuğa dokununca güdüm DURUR ve kendiliğinden GERİ GELMEZ.
+def test_R120_KIP_YALNIZ_PANELDEN_ve_ARM_DAIMA_KUMANDADAN():
+    """⛔⛔ BU BEKÇİ TERSİNE ÇEVRİLDİ (kullanıcı kararı 2026-09-02).
 
-    Kullanıcı kararı (2026-08-31): *"kumanda çubuğu oynatıldığı anda eğer
-    güdüm algoritmaları çalışıyorsa o pipeline durdurulup kontrol manuele
-    geçsin."*
+    ESKİ HÂLİ "çubuk oynayınca otonom MANDALLI olarak düşer" davranışını
+    KORUYORDU (kullanıcı kararı 2026-08-31). O davranış sahada bir yarışma
+    hakkına mal oldu: eşik çubuk gezinmesinin %2'si (0.04) kadar hassastı
+    ve otonomu HER TİKTE kesiyordu — panelde OTONOM'a basılıyor, bir tik
+    veriliyor, hemen `sebep=pilot_devraldi` ile MANUEL'e düşülüyordu.
 
-    ⛔ ÖNCEDEN ÇALIŞMIYORDU (ölçüldü 2026-08-31): çubuk oynatmak yalnız
-      `insan` alanını "kumanda" yapıyor, `kaynak` OTONOM kalıyordu — araç
-      güdümle uçmaya devam ediyordu. `UCUS_KARTI.md` "çubuk oynat, 3 s
-      hâkimiyet alır" diyordu; YANLIŞTI.
+    YENİ DEĞİŞMEZ — İKİ PARÇA:
 
-    ⛔ ÜÇ AYRI ÖZELLİK SINANIR:
-      1. çubuk hareketi otonomu düşürür  ve  `sebep` bunu SÖYLER
-      2. MANDALLI: hâkimiyet süresi geçince otonom kendiliğinden DÖNMEZ
-      3. ANAHTARDAN BAĞIMSIZ: veto anahtarını çevirmek mandalı TETİKLEMEZ
-         (yoksa veto kullanmak otonomu kalıcı öldürürdü — R53 yakalamıştı)
+    1. KİP YALNIZ PANELDEN SEÇİLİR. Çubuk oynatmak kipi DEĞİŞTİRMEZ;
+       otonom sürer. MANUEL düğmesi manuele, OTONOM düğmesi otonoma
+       geçirir. (Hâkimiyet hâlâ çalışır: çubuğu oynatan insan MANUEL
+       kipteyken komutu sürer — ama kipi o belirlemez.)
+
+    2. ⛔⛔ ARM DAİMA FİZİKSEL KUMANDADAN — HÂKİMİYETTEN BAĞIMSIZ.
+       ÖLÇÜLDÜ (2026-09-02): kumanda TAKILI ve arm anahtarı AÇIK olduğu
+       hâlde, pilot çubuğa dokunmadığı için `kmd_hakim` False kalıyor,
+       `cubuk` panel oluyor ve ARM panelin BASILI TUTMA isteyen
+       düğmesinden okunuyordu -> arm=False. Yani otonom uçuşta araç ARM
+       KALAMIYORDU. Panelin GÖREVİ BAŞLAT düğmesi de `if(!k.arm)`
+       yüzünden hep "ARAÇ ARM DEĞİL" diyordu.
+       ARM bir ANAHTARDIR: değeri değişmese de anlamlıdır. Hâkimiyet
+       çubuklar için doğru ölçüt, anahtar için DEĞİL.
+
+    3. VETO anahtarı hâlâ otonomu keser ve geri açınca otonom DÖNER
+       (R53 sözleşmesi korunuyor).
     """
     import time as _t
 
-    # --- 1 + 2: çubuk devralır ve MANDALLANIR ---
+    # --- 1: ÇUBUK OYNAR AMA KİP DEĞİŞMEZ ---
     sp, bag, km, ks = _duzenek(throttle=0.0, pitch=0.0, roll=0.0, yaw=0.0,
                                arm=True, kip_anahtari=None)
     ks.kip_sec("OTONOM")
 
     def _tik():
-        ks.panel_yaz(0.0, 0.0, 0.0, 0.0, arm=True, otonom_izin=True)
+        ks.panel_yaz(0.0, 0.0, 0.0, 0.0, arm=False, otonom_izin=True)
         ks.otonom_yaz(0.1, 0.1, 0.1, 0.1)
         return ks.tik()[1]
 
     assert _tik()["kaynak"] == "OTONOM"
-    assert ks.pilot_devraldi is False
+    assert not hasattr(ks, "pilot_devraldi"), (
+        "çubukla devralma söküldü ama `pilot_devraldi` hâlâ duruyor "
+        "(CLAUDE.md §5.12: elenen özellik TAMAMEN çıkar)")
 
     km.c = Cubuklar(throttle=0.5, pitch=0.5, roll=-0.5, yaw=0.5,
                     arm=True, kip_anahtari=None)
     d = _tik()
-    assert d["kaynak"] == "MANUEL", "çubuk oynadı ama güdüm sürüyor"
-    assert d["sebep"] == "pilot_devraldi", (
-        "devralmanın sebebi panelde görünmüyor: %s" % d["sebep"])
-    assert ks.pilot_devraldi is True
-    # ⛔ KİP OPERATÖRÜN SEÇİMİDİR — devralma onu EZMEZ (R36/R67 sözleşmesi)
-    assert ks.kip == "OTONOM", "devralma operatörün kip seçimini ezdi"
+    assert d["kaynak"] == "OTONOM", (
+        "çubuk oynadı ve otonom kesildi — çubukla devralma SÖKÜLMÜŞ "
+        "olmalıydı (sebep=%s)" % d["sebep"])
+    assert ks.kip == "OTONOM"
 
-    # hâkimiyet süresi GEÇSE BİLE otonom dönmez
+    # --- 2: ARM KUMANDANIN ANAHTARINDAN, panel arm=False dese bile ---
+    assert d["arm"] is True, (
+        "kumandanın arm anahtarı AÇIK ama arm okunmadı — panelin basılı "
+        "tutma düğmesi kazandı; araç otonom uçuşta ARM KALAMAZ")
+    # hâkimiyet süresi geçsin: kumanda artık 'hâkim' değil ama ARM YİNE ONDAN
     _t.sleep(ks.cfg.KMD_HAKIMIYET_S + 0.4)
     d = _tik()
-    assert d["kaynak"] == "MANUEL", (
-        "hâkimiyet süresi geçince otonom KENDİLİĞİNDEN geri geldi — "
-        "kontrolü kapan pilot aracın yeniden kendi uçtuğunu görürdü")
+    assert d["kmd_hakim"] is False, "hâkimiyet süresi geçmedi, sınama geçersiz"
+    assert d["arm"] is True, (
+        "kumanda hâkim değilken arm anahtarı yok sayıldı — 2026-09-02'de "
+        "ölçülen kısır döngü geri geldi")
+    # anahtar KAPANINCA arm o tikte düşer — pilotun dur yolu budur
+    km.c.arm = False
+    assert _tik()["arm"] is False, (
+        "kumandanın arm anahtarı kapandı ama araç arm kaldı — pilotun "
+        "aracı durdurma yolu yok")
 
-    # yalnız panelden OTONOM temizler
+    # --- 3: MANUEL/OTONOM YALNIZ PANELDEN ---
+    ks.kip_sec("MANUEL")
+    assert _tik()["kaynak"] == "MANUEL"
     ks.kip_sec("OTONOM")
-    assert ks.pilot_devraldi is False
-    assert _tik()["kaynak"] == "OTONOM"
+    km.c.arm = True
+    assert _tik()["kaynak"] == "OTONOM", "panelden OTONOM geri gelmedi"
 
-    # --- 3: VETO ANAHTARI mandalı TETİKLEMEZ ---
+    # --- 4: VETO ANAHTARI hâlâ keser ve geri açılınca DÖNER (R53) ---
     sp2, bag2, km2, ks2 = _duzenek(throttle=0.0, pitch=0.0, roll=0.0, yaw=0.0,
                                    arm=True, kip_anahtari=True)
     ks2.kip_sec("OTONOM")
 
     def _tik2():
-        ks2.panel_yaz(0.0, 0.0, 0.0, 0.0, arm=True, otonom_izin=True)
+        ks2.panel_yaz(0.0, 0.0, 0.0, 0.0, arm=False, otonom_izin=True)
         ks2.otonom_yaz(0.1, 0.1, 0.1, 0.1)
         return ks2.tik()[1]
 
@@ -3508,7 +3531,6 @@ def test_R120_PILOT_CUBUKLA_DEVRALIR_mandalli_ve_ANAHTARDAN_bagimsiz():
     km2.c.kip_anahtari = False
     d = _tik2()
     assert d["kaynak"] == "MANUEL" and d["sebep"] == "pilot_vetosu"
-    assert ks2.pilot_devraldi is False, "veto anahtarı devralma mandalını tetikledi"
     km2.c.kip_anahtari = True
     assert _tik2()["kaynak"] == "OTONOM", (
         "veto geri açıldı ama otonom dönmedi — anahtar kullanmak "

@@ -359,10 +359,11 @@ def main():
             #   Telemetri (geri bağ) ölüp RC (ileri bağ) sağlamken indirmek
             #   TAM DA istediğimiz şeydir; onu kapının içine koymak,
             #   özelliği en çok gerektiği anda kapatırdı.
-            # ⛔ PİLOT ÇUBUKLA DEVRALDIYSA İNİŞ DE DURUR. Yoksa iniş
-            #   "aktif" kalır ve operatör sonra OTONOM'a bastığında araç
+            # ⛔ MANUEL'E GEÇİLİRSE İNİŞ DE DURUR. Yoksa iniş "aktif"
+            #   kalır ve operatör sonra OTONOM'a bastığında araç
             #   beklenmedik şekilde alçalmaya KALDIĞI YERDEN devam eder.
-            if inis.aktif and (ks.kip != "OTONOM" or ks.pilot_devraldi):
+            #   (Çubukla devralma 2026-09-02'de söküldü; tek kapı kiptir.)
+            if inis.aktif and ks.kip != "OTONOM":
                 inis.dur()
                 ks.aux_yaz({})
 

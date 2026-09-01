@@ -1005,10 +1005,6 @@ function gosterim(d){
   rInis.hidden = !(inisK || di.aktif===true);
   rInis.className = "rozet kotu";
   rInis.textContent = inisK ? "⛔ PAKET KESİLDİ" : "⬇ DİKEY İNİŞ";
-  // ⛔ PİLOT ÇUBUKLA DEVRALDI — operatör bunu GÖRMELİ, yoksa panelde
-  //   OTONOM yazarken aracın niye güdümle uçmadığını anlayamaz.
-  if(k.pilot_devraldi===true)
-    document.getElementById("b_otonom").classList.add("uyari");
   rozet("r_sunucu", sv.baglandi===true, "SUNUCU "+(sv.gonderilen||0));
   // ⛔ GÜVENLİ PENCERE (Skydagger rehberi §8): ilk saniyelerde YALNIZ SAFE
   //    basılır. Operatör bunu GÖRMELİ, yoksa "komut gitmiyor" sanır.
@@ -1200,10 +1196,7 @@ function gosterim(d){
     u.push("⚠ video kaydı hatası: "+d.video.hata);
   if((d.gudum||{}).durum=="KALKIS")
     u.unshift("🚀 OTONOM KALKIŞ — araç tırmanıyor ("+((d.konum||{}).yukari??0)+" m / "+
-              "hedef 40 m). Çubuğa dokunmak görevi KESER.");
-  if(k.pilot_devraldi===true && k.kip!="OTONOM")
-    u.push("ℹ PİLOT ÇUBUKLA DEVRALDI — güdüm durduruldu. Otonoma dönmek "+
-           "için panelde OTONOM'a bas.");
+              "hedef "+(d.kalkis_alt??35)+" m).");
   if(di.aktif===true) u.push("⬇ DİKEY İNİŞ SÜRÜYOR ("+di.asama+
       ") — görev kesildi, araç alçalıyor. Yere değince DISARM et; "+
       "kendiliğinden disarm ETMEZ.");

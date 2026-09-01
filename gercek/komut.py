@@ -161,7 +161,6 @@ class KomutSureci:
         #     değişmiş olması, elindeki aracı tanımaması demektir.
         self._aux = {}
         #: Pilot çubukla devraldı mı (panelde gösterilir).
-        self._pilot_devraldi = False
         # ⭐ PANEL ÇUBUKLARI — fiziksel kumanda YOKKEN insan girdisi.
         #   ⛔ ARM KURALI DEĞİŞMEDİ: arm bir İNSAN kaynağından gelir
         #     (fiziksel kumanda ya da panel), GÜDÜMDEN ASLA. Güdümün
@@ -178,8 +177,7 @@ class KomutSureci:
         # §5.1 mekanizma / teşhis
         self.sayac = {"tik": 0, "gonderilen": 0, "kesilen": 0,
                       "oto_dusme": 0, "kmd_kopuk": 0, "manuel": 0,
-                      "otonom": 0, "veto": 0, "kmd_hareket": 0,
-                      "pilot_devraldi": 0}
+                      "otonom": 0, "veto": 0, "kmd_hareket": 0}
         self.durum = {"kaynak": "-", "sebep": "-", "arm": False}
         self.insan_kaynagi = ""
 
@@ -259,19 +257,12 @@ class KomutSureci:
                 "yas": round(time.monotonic() - o.t, 3)}
 
     @property
-    def pilot_devraldi(self):
-        """Pilot çubukla devraldı mı. Panelde OTONOM'a basmak temizler."""
-        return self._pilot_devraldi
-
-    @property
     def inis_kilitli(self):
         return self._inis_kilidi
 
     def kip_sec(self, kip):
         if kip not in ("MANUEL", "OTONOM"):
             raise ValueError("kip MANUEL ya da OTONOM olmalı: %r" % kip)
-        if kip == "OTONOM":
-            self._pilot_devraldi = False       # operatör bilerek geri aldı
         self.kip = kip
 
     # ---------------- tek tik ----------------
@@ -322,7 +313,6 @@ class KomutSureci:
 
         kmd = self.kumanda.oku() if self.kumanda is not None else None
         self._kmd_takili = kmd is not None
-        cubuk_oynadi = False
         if kmd is None:
             self._kmd_onceki = None              # kopunca referans temizlenir
         if kmd is not None:
@@ -338,15 +328,12 @@ class KomutSureci:
             if o is None:
                 self._kmd_onceki = simdiki      # ilk okuma: referans, hareket DEĞİL
             else:
-                # ⛔ İKİ AYRI SİNYAL:
-                #   `cubuk_oynadi` = YALNIZ dört analog eksen. Devralma
-                #     mandalı buna bağlanır (bkz. 1b).
-                #   `oynadi`       = çubuklar + arm + veto anahtarı.
-                #     Hâkimiyet (hangi insan sürüyor) buna bağlanır;
-                #     anahtar çevirmek de bir müdahaledir.
-                cubuk_oynadi = any(abs(simdiki[i] - o[i]) > c.KMD_HAREKET_ESIK
-                                   for i in range(4))
-                oynadi = (cubuk_oynadi
+                # HÂKİMİYET — hangi insan sürüyor: çubuklar + arm + veto
+                # anahtarı. Anahtar çevirmek de bir müdahaledir.
+                # ⚠ Bu YALNIZ çubuk önceliğini belirler; KİP'e dokunmaz
+                #   (çubukla devralma 2026-09-02'de söküldü).
+                oynadi = (any(abs(simdiki[i] - o[i]) > c.KMD_HAREKET_ESIK
+                              for i in range(4))
                           or simdiki[4] != o[4] or simdiki[5] != o[5])
                 if oynadi:
                     self._kmd_hareket_t = simdi
@@ -356,35 +343,25 @@ class KomutSureci:
         kmd_hakim = (kmd is not None
                      and (simdi - self._kmd_hareket_t) <= c.KMD_HAKIMIYET_S)
 
-        # --- 1b) ⛔⛔ PİLOT ÇUBUĞA DOKUNDU -> OTONOM DÜŞER, MANDALLI ---
-        #   Kullanıcı kararı (2026-08-31): *"kumanda çubuğu oynatıldığı anda
-        #   eğer güdüm algoritmaları çalışıyorsa o pipeline durdurulup
-        #   kontrol manuele geçsin."*
+        # ⛔⛔ ÇUBUKLA DEVRALMA SÖKÜLDÜ (kullanıcı kararı 2026-09-02).
+        #   ESKİ HÂLİ: kumandanın dört analog ekseninden biri
+        #   KMD_HAREKET_ESIK (0.04) kadar oynarsa otonom MANDALLI olarak
+        #   kesiliyordu (kullanıcı kararı 2026-08-31).
         #
-        #   ⛔ ÖNCEDEN BÖYLE DEĞİLDİ ve BELGE YANLIŞTI. Ölçüldü (2026-08-31):
-        #     çubuk oynatmak yalnız `insan` kaynağını "kumanda" yapıyordu;
-        #     `kaynak` OTONOM kalıyor, araç güdümle uçmaya devam ediyordu.
-        #     Veto anahtarı da atanmamış (DOW_KMD_EKS_KIP=-1) olduğu için
-        #     pilotun kumandadan otonomu kesme yolu YOKTU.
+        #   ⛔ NİYE SÖKÜLDÜ: eşik çubuk gezinmesinin %2'si kadar hassastı
+        #   ve sahada otonomu HER TİKTE kesiyordu — panelde OTONOM'a
+        #   basılıyor, bir tik veriliyor, hemen `sebep=pilot_devraldi`
+        #   ile MANUEL'e düşülüyordu. Bir yarışma hakkı buna gitti.
         #
-        #   ⛔ YALNIZ ÇUBUK — ANAHTAR DEĞİL. `oynadi` arm/veto anahtarını da
-        #     hareket sayar (doğrusu da odur, hâkimiyet için). Ama devralma
-        #     mandalını anahtara bağlamak, VETO ANAHTARINI KULLANMAYI
-        #     cezalandırırdı: pilot veto edip sonra geri açtığında otonom
-        #     dönmezdi. Bekçi R53 tam bunu yakaladı.
+        #   YENİ KURAL: kip YALNIZ PANELDEN seçilir. MANUEL düğmesi
+        #   manuele, OTONOM düğmesi otonoma geçirir. Çubuk oynatmak kipi
+        #   DEĞİŞTİRMEZ.
         #
-        #   ⛔ `self.kip`'E DOKUNULMAZ. Kip OPERATÖRÜN SEÇİMİDİR; onu
-        #     ezmek "panelde ne seçili" ile "pilot ne yaptı" ayrımını yok
-        #     eder ve veto teşhisini (`sebep`) yutar (R36/R67 yakaladı).
-        #     Bunun yerine AYRI bir mandal otonomu bloke eder.
-        #
-        #   ⛔ MANDALLI, ANLIK DEĞİL: hâkimiyet süresi dolunca otonom
-        #     KENDİLİĞİNDEN geri gelmez. Gelseydi, kontrolü kapan pilot
-        #     3 saniye sonra aracın yeniden kendi kendine uçtuğunu görürdü.
-        #     Otonoma dönüş yalnız panelden OTONOM'a basmakla olur.
-        if cubuk_oynadi and self.kip == "OTONOM" and not self._pilot_devraldi:
-            self.sayac["pilot_devraldi"] += 1
-            self._pilot_devraldi = True
+        #   ⚠ PİLOTUN ARACI DURDURMA YOLU KAPANMADI, tersine AÇILDI:
+        #     kumandanın ARM ANAHTARI artık hâkimiyetten BAĞIMSIZ okunuyor
+        #     (bkz. aşağıdaki "ARM DAİMA PİLOTTAN"). Anahtarı kapatmak
+        #     aracı O TİKTE disarm eder — çubuktan daha kesin bir dur.
+        #     Ayrıca panelde MANUEL, DİKEY İNİŞ ve PAKET KES duruyor.
         panel = self._panel_oku(simdi)
 
         if kmd_hakim:
@@ -403,7 +380,23 @@ class KomutSureci:
             self.insan_kaynagi = ""
         if cubuk is not None:
             self._son_kmd_t = simdi
-            self._son_arm = cubuk.arm
+            # ⛔⛔ ARM FİZİKSEL KUMANDADAN GELİR — HÂKİMİYETTEN BAĞIMSIZ.
+            #   ÖLÇÜLDÜ (2026-09-02, tezgâhta): kumanda TAKILI ve arm
+            #   anahtarı AÇIK olduğu hâlde, pilot çubuğa dokunmadığı için
+            #   `kmd_hakim` False kalıyordu; `cubuk` panel oluyordu ve ARM
+            #   panelin (basılı tutma isteyen) düğmesinden okunuyordu ->
+            #   arm=False. Yani otonom uçuşta araç ARM KALAMIYORDU:
+            #     · pilot çubuğa dokunmazsa -> panel hâkim -> disarm
+            #     · pilot çubuğa dokunursa  -> (eski) pilot_devraldi
+            #   Çıkışı olmayan bir kısır döngüydü ve panelin GÖREVİ BAŞLAT
+            #   düğmesi de `if(!k.arm)` yüzünden hep "ARAÇ ARM DEĞİL"
+            #   diyordu. Bir yarışma hakkı buna gitti.
+            #
+            #   ⛔ ARM BİR ANAHTARDIR, ÇUBUK DEĞİL: değeri değişmese de
+            #     ANLAMLIDIR. Hâkimiyet (kim en son oynattı) çubuklar için
+            #     doğru bir ölçüttür, anahtar için DEĞİLDİR.
+            #   Kumanda takılıysa arm ONDAN okunur; yoksa panelden.
+            self._son_arm = kmd.arm if kmd is not None else cubuk.arm
             # ⛔⛔ PİLOTUN VETO ANAHTARI — panelden seçilen kipi EZER.
             #   Pilot anahtarı kapatınca otonom O TİKTE düşer; panelin
             #   ne dediği önemsizdir. Bu, yerden güdümlü mimaride pilotun
@@ -445,7 +438,7 @@ class KomutSureci:
         if self.kip == "OTONOM" and not izin:
             self.sayac["veto"] += 1
         otonom_uygun = (self.kip == "OTONOM" and izin and oto_taze
-                        and not teslim_engeli and not self._pilot_devraldi)
+                        and not teslim_engeli)
 
         if otonom_uygun:
             komut = (oto.throttle, oto.pitch, oto.roll, oto.yaw)
@@ -462,8 +455,6 @@ class KomutSureci:
                 sebep = "-"
             elif not izin:
                 sebep = "pilot_vetosu"; self.sayac["oto_dusme"] += 1
-            elif self._pilot_devraldi:
-                sebep = "pilot_devraldi"; self.sayac["oto_dusme"] += 1
             elif not oto_taze:
                 sebep = "gudum_bayat"; self.sayac["oto_dusme"] += 1
             else:
@@ -507,8 +498,8 @@ class KomutSureci:
 
         # --- 4) ⛔ ARM DAİMA PİLOTTAN ---
         arm = self._son_arm
-        # ⛔ EK KANALLAR YALNIZ OTONOM'DA. Pilot devraldıysa çubuklarının
-        #   anlamı değişmesin diye ek kipler DÜŞER (bkz. __init__ notu).
+        # ⛔ EK KANALLAR YALNIZ OTONOM'DA: pilot elle uçarken çubuklarının
+        #   anlamı uçuş kartı kipiyle değişmesin.
         _aux = self._aux if (kaynak == "OTONOM" and self._aux) else None
         ok = self.bag.rc_gonder(komut[0], komut[1], komut[2], komut[3],
                                 arm=arm, harita=self.harita, aux=_aux)
@@ -516,7 +507,6 @@ class KomutSureci:
             self.sayac["gonderilen"] += 1
         self.durum = {"kaynak": kaynak, "sebep": sebep, "arm": arm,
                       "inis_kilidi": False, "aux": dict(_aux or {}),
-                      "pilot_devraldi": self._pilot_devraldi,
                       "kmd_kopuk": kmd_kopuk, "komut": komut,
                       "insan": self.insan_kaynagi,
                       "kmd_takili": self._kmd_takili,
