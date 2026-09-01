@@ -139,6 +139,17 @@ class KomutSureci:
         self._arm = False
         #: kumanda arm anahtarının önceki hâli (KENAR yakalamak için)
         self._kmd_arm_onceki = None
+        # ⛔⛔ GÖREV, KİPTEN AYRI (kullanıcı kararı 2026-09-02).
+        #   ESKİ HÂLİ: OTONOM'a basmak görevi DE başlatıyordu; araç o
+        #   anda tırmanmaya kalkıyordu. Kullanıcı: "otonom moda basınca
+        #   direkt görev başlamasın; orada bir ARM ve bir GÖREV BAŞLAT
+        #   düğmesi olsun; otonom modda araç ARM'ken görev başlata
+        #   basılırsa görev başlasın."
+        #   ⭐ TEKNİK OLARAK DA ŞART: uçuş kartı gaz çubuğu AŞAĞIDA
+        #     değilken ARM ETMEZ (`min_check` ~1050 µs). OTONOM'a basar
+        #     basmaz güdüm tırmanış gazı verirse arm etmek İMKÂNSIZ hâle
+        #     gelir. Doğru sıra: ARM -> sonra GÖREV.
+        self._gorev = False
         self._son_kmd_t = 0.0
         self._veto_izin = False        # pilot izin vermeden otonom YOK
         # ⛔⛔ FAILSAFE İNİŞ KİLİDİ (kullanıcı kararı 2026-08-30).
@@ -270,6 +281,19 @@ class KomutSureci:
     def inis_kilitli(self):
         return self._inis_kilidi
 
+    def gorev_ayarla(self, ac):
+        """Görevi başlat/durdur. ⛔ YALNIZ OTONOM kipinde anlamlıdır.
+
+        MANUEL'e geçmek görevi KENDİLİĞİNDEN durdurur (bkz. `kip_sec`) —
+        iki kip arasında hiçbir bağ kalmasın diye.
+        """
+        self._gorev = bool(ac)
+        return self._gorev
+
+    @property
+    def gorev(self):
+        return self._gorev
+
     def arm_ayarla(self, ac):
         """ARM mandalını panelden ayarla. `ac` True/False.
 
@@ -287,6 +311,11 @@ class KomutSureci:
     def kip_sec(self, kip):
         if kip not in ("MANUEL", "OTONOM"):
             raise ValueError("kip MANUEL ya da OTONOM olmalı: %r" % kip)
+        # ⛔ SERT AYRIM: MANUEL'e geçmek görevi DURDURUR. Yoksa görev
+        #   "açık" kalır ve operatör sonra OTONOM'a bastığında araç
+        #   beklenmedik şekilde kaldığı yerden tırmanmaya devam eder.
+        if kip != "OTONOM":
+            self._gorev = False
         self.kip = kip
 
     # ---------------- tek tik ----------------
@@ -477,8 +506,12 @@ class KomutSureci:
         teslim_engeli = c.VETO_ZORUNLU and kmd_teslim
         if self.kip == "OTONOM" and not izin:
             self.sayac["veto"] += 1
-        otonom_uygun = (self.kip == "OTONOM" and izin and oto_taze
-                        and not teslim_engeli)
+        # ⛔ BEŞİNCİ ŞART DEĞİL, OPERATÖR NİYETİ: görev başlatılmadıysa
+        #   güdüm komutu araca GİTMEZ. Emniyet kapısı (dört şart)
+        #   değişmedi; bu, "otonom seçmek" ile "görevi başlatmak"ı
+        #   ayırmak içindir.
+        otonom_uygun = (self.kip == "OTONOM" and self._gorev and izin
+                        and oto_taze and not teslim_engeli)
 
         if otonom_uygun:
             komut = (oto.throttle, oto.pitch, oto.roll, oto.yaw)
@@ -493,6 +526,8 @@ class KomutSureci:
             kaynak = "MANUEL"
             if self.kip != "OTONOM":
                 sebep = "-"
+            elif not self._gorev:
+                sebep = "gorev_baslamadi"
             elif not izin:
                 sebep = "pilot_vetosu"; self.sayac["oto_dusme"] += 1
             elif not oto_taze:
@@ -517,6 +552,7 @@ class KomutSureci:
                           "komut": None,
                           "kmd_takili": self._kmd_takili,
                           "kmd_hakim": False,
+                          "gorev": self._gorev,
                           "sebep": ("teslim_suresi" if _teslimden
                                     else "paket_kesildi"),
                           "arm": self._arm, "kmd_kopuk": kmd_kopuk}
@@ -546,6 +582,7 @@ class KomutSureci:
         if ok:
             self.sayac["gonderilen"] += 1
         self.durum = {"kaynak": kaynak, "sebep": sebep, "arm": arm,
+                      "gorev": self._gorev,
                       "inis_kilidi": False, "aux": dict(_aux or {}),
                       "kmd_kopuk": kmd_kopuk, "komut": komut,
                       "insan": self.insan_kaynagi,

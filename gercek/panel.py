@@ -409,6 +409,8 @@ button.video.kayitta{background:#7f1d1d;border-color:#f87171;color:#fee2e2;
   border:1px solid #2a3441;background:#141a22}
 .kipbilgi.oto{background:#052e21;border-color:#34d399;color:#d1fae5}
 .kipbilgi.man{background:#111827;border-color:#3b82f6;color:#bfdbfe}
+.kipbilgi.bekle{background:#2a2010;border-color:#f59e0b;color:#fde68a}
+.kipbilgi.kotu{background:#2a1215;border-color:#f87171;color:#fecaca}
 button.gorev{background:#065f46;border-color:#34d399;color:#d1fae5;
   font-weight:700;padding:13px;width:100%;font-size:14px;letter-spacing:.4px}
 button.gorev:hover{background:#047857}
@@ -464,6 +466,7 @@ button.armli{background:#166534;border-color:#4ade80}
         <button id=b_arm class=arm>ARM</button>
       </div>
       <div class=dugmeler style="margin-top:8px">
+        <button id=b_gorev class=gorev>🚀 GÖREVİ BAŞLAT</button>
         <div id=kip_bilgi class=kipbilgi>—</div>
       </div>
       <div class=dugmeler style="margin-top:6px">
@@ -626,23 +629,8 @@ document.getElementById("b_otonom").onclick=()=>{
                 "(bu karar uçuş kaydına düşer)")) return;
     window._klZorla=true;
   }
-  // ⛔⛔ GÖREV UYARISI ARTIK BURADA. Ayrı "GÖREVİ BAŞLAT" düğmesi
-  //   kaldırıldı (aynı işi yapıyordu); otonoma geçmek görevi başlatmaktır,
-  //   o yüzden uyarı da bu düğmenin üstünde olmalı.
-  const d0=window._sonDurum||{}; const k0=d0.komut||{};
-  if(!k0.arm){
-    if(!confirm("⚠ ARAÇ ARM DEĞİL.\n\nOTONOM seçilecek ama motorlar "+
-                "dönmeyecek. Devam edilsin mi?")) return;
-  } else if((d0.gudum||{}).durum=="KALKIS"){
-    if(!confirm("🚀 GÖREV BAŞLIYOR — ARAÇ KENDİ KALKACAK\n\n"+
-                "  · dikey tırmanış "+(d0.kalkis_vz??3)+" m/s ile "+
-                (d0.kalkis_alt??35)+" m'ye\n"+
-                "  · sonra hedefe yönelip GPS ile takip\n\n"+
-                "⛔ Pervanelerin durumunu ve alanı doğrula.\n"+
-                "⛔ OTONOMDA KUMANDA GÜDÜME KARIŞMAZ: durdurmak için\n"+
-                "   panelde MANUEL, DİKEY İNİŞ ya da PAKET KES.\n\n"+
-                "Başlasın mı?")) return;
-  }
+  // ⛔ OTONOM ARTIK YALNIZ KİP SEÇER — görevi BAŞLATMAZ.
+  //   Görev ayrı düğmede (kullanıcı kararı 2026-09-02).
   kip("OTONOM");
 };
 // ⏺ VİDEO KAYDI — FPV görüntüsünü dosyaya yazar.
@@ -766,11 +754,48 @@ document.getElementById("b_kmd").onclick=(e)=>{
 //   ARM->DISARM anında ve onaysızdır — durdurmak hızlı olmalı.
 const bArm=document.getElementById("b_arm");
 bArm.onclick=async()=>{
-  const su=((window._sonDurum||{}).komut||{}).arm===true;
-  if(!su && !confirm("⚠ ARM — MOTORLAR DÖNMEYE BAŞLAYACAK.\n\n"+
-                     "Pervanelerin durumunu ve çevreni doğrula.\n\nARM edilsin mi?"))
-    return;
+  const d0=window._sonDurum||{}; const k0=d0.komut||{};
+  const su=k0.arm===true;
+  if(!su){
+    // ⛔⛔ GAZ AŞAĞIDA DEĞİLSE UÇUŞ KARTI ARM ETMEZ (`min_check` ~1050 µs).
+    //   2026-09-02'de sahada tam bu yaşandı: ARM'a basıldı, motorlar
+    //   dönmedi ve panel SEBEBİNİ SÖYLEMİYORDU. Panelin sanal gaz çubuğu
+    //   açılışta ORTADA (0.00 = 1500 µs) duruyor; aşağı çekilmeden arm
+    //   mümkün değil. Çubuk merkeze DÖNMEZ, çektiğin yerde kalır.
+    const thr=(k0.komut||[])[0];
+    if(thr!=null && thr>-0.88){
+      alert("⛔ GAZ ÇUBUĞU AŞAĞIDA DEĞİL — uçuş kartı ARM ETMEZ.\n\n"+
+            "şu an: "+thr.toFixed(2)+"  ("+Math.round(1500+thr*512)+" µs)\n"+
+            "gerekli: −0.88 ve altı  (≤1050 µs)\n\n"+
+            "SOL pad'deki gaz çubuğunu EN AŞAĞI çek (çubuk orada kalır), "+
+            "sonra tekrar ARM'a bas.\nKumandayı kullanıyorsan onun gaz "+
+            "çubuğunu dibe indir ve bir kez oynat.");
+      return;
+    }
+    if(!confirm("⚠ ARM — MOTORLAR DÖNMEYE BAŞLAYACAK.\n\n"+
+                "Pervanelerin durumunu ve çevreni doğrula.\n\nARM edilsin mi?"))
+      return;
+  }
   await post("/api/arm",{ac:!su});
+};
+
+// ⛔⛔ GÖREVİ BAŞLAT — OTONOM'DAN AYRI DÜĞME (kullanıcı kararı 2026-09-02).
+//   OTONOM'a basmak artık YALNIZ kipi seçer. Görevi bu düğme başlatır ve
+//   yalnız araç ARM'ken çalışır. Doğru sıra: OTONOM -> ARM -> GÖREV.
+document.getElementById("b_gorev").onclick=async()=>{
+  const d0=window._sonDurum||{}; const k0=d0.komut||{};
+  if(k0.gorev===true){ await post("/api/gorev",{ac:false}); return; }
+  if(k0.kip!=="OTONOM"){ alert("⛔ Önce OTONOM kipine geç."); return; }
+  if(k0.arm!==true){ alert("⛔ ARAÇ ARM DEĞİL.\n\nÖnce ARM et."); return; }
+  if(!confirm("🚀 GÖREV BAŞLIYOR — ARAÇ KENDİ KALKACAK\n\n"+
+              "  · dikey tırmanış "+(d0.kalkis_vz??3)+" m/s ile "+
+              (d0.kalkis_alt??35)+" m'ye\n"+
+              "  · sonra hedefe yönelip GPS ile takip\n\n"+
+              "⛔ Pervanelerin durumunu ve alanı doğrula.\n"+
+              "⛔ OTONOMDA KUMANDA GÜDÜME KARIŞMAZ: durdurmak için\n"+
+              "   panelde GÖREVİ DURDUR, MANUEL, DİKEY İNİŞ ya da PAKET KES.\n\n"+
+              "Başlasın mı?")) return;
+  await post("/api/gorev",{ac:true});
 };
 
 // ⛔ ESKİ HÂLİ setInterval(...,33) İDİ VE GERİ BASINÇ YOKTU: önceki istek
@@ -1025,27 +1050,42 @@ function gosterim(d){
     : (vd.kare ? ("⏺ VİDEO KAYDI BAŞLAT   (son: "+(vd.yol||"")+")")
                : "⏺ VİDEO KAYDI BAŞLAT");
   window._sonDurum = d;
-  // ⛔⛔ "GÖREVİ BAŞLAT" DÜĞMESİ KALDIRILDI (kullanıcı kararı 2026-09-02).
-  //   O düğme `post("/api/kip",{kip:"OTONOM"})` yapıyordu — yani OTONOM
-  //   düğmesinin AYNISI. İki düğme aynı işi yapınca operatör hangisinin
-  //   ne yaptığını bilemiyordu; üstelik MANUEL kipteyken de duruyordu.
-  //   Kullanıcı: "manuel mod ile otonom modu birbirinden sertçe ayıralım,
-  //   hiçbir bağları kalmasın."
-  //   Görevi başlatan tek şey artık OTONOM düğmesidir ve uyarısı orada.
+  // ⛔⛔ KİP ve GÖREV AYRI ŞEYLER (kullanıcı kararı 2026-09-02).
+  //   OTONOM = "kip seçildi". GÖREV = "araç kalksın ve hedefe gitsin".
+  //   Eskiden OTONOM'a basmak ikisini birden yapıyordu ve araç o anda
+  //   tırmanmaya kalkıyordu; üstelik uçuş kartı gaz yukarıdayken ARM
+  //   ETMEDİĞİ için doğru sıra ZORUNLU: OTONOM -> ARM -> GÖREV.
   const _g0 = d.gudum||{};
-  const kb = document.getElementById("kip_bilgi");
-  if(k.kip=="OTONOM"){
-    kb.className="kipbilgi oto";
-    kb.innerHTML = (k.kaynak=="OTONOM")
-      ? ("🚀 GÖREV SÜRÜYOR — <b>"+(_g0.durum||"?")+"</b>"+
-         (_g0.durum=="KALKIS"
-           ? ("  tırmanıyor "+(_g0.yukseklik!=null?_g0.yukseklik.toFixed(0):"?")+
-              " m / hedef "+(d.kalkis_alt??35)+" m") : ""))
-      : ("⛔ OTONOM SEÇİLİ ama güdüm SÜRMÜYOR — sebep: <b>"+
-         (k.sebep&&k.sebep!="-"?k.sebep:"?")+"</b>");
-  } else {
+  const bGv = document.getElementById("b_gorev");
+  const kb  = document.getElementById("kip_bilgi");
+  const otonomKip = (k.kip=="OTONOM");
+  // ⛔ SERT AYRIM: görev düğmesi MANUEL kipte HİÇ GÖRÜNMEZ.
+  bGv.style.display = otonomKip ? "" : "none";
+  bGv.disabled = !otonomKip || (k.arm!==true && k.gorev!==true);
+  bGv.classList.toggle("aktif", k.gorev===true);
+  bGv.textContent = (k.gorev===true) ? "⏹ GÖREVİ DURDUR"
+      : (k.arm===true ? "🚀 GÖREVİ BAŞLAT" : "🚀 GÖREVİ BAŞLAT — önce ARM et");
+  // ⛔ ÇUBUK ALANI: otonomda grilenir. Her tazelemede uygulanır —
+  //   yalnız düğmeye basınca uygulamak sayfa yenilenince bozuluyordu.
+  const mk=document.getElementById("manuel_kutu");
+  if(mk) mk.classList.toggle("pasif", otonomKip);
+  if(!otonomKip){
     kb.className="kipbilgi man";
-    kb.innerHTML = "✋ MANUEL — çubuklar sende. Otonom için <b>OTONOM</b>'a bas.";
+    kb.innerHTML="✋ <b>MANUEL</b> — çubuklar sende. Otonom için OTONOM'a bas.";
+  } else if(k.gorev!==true){
+    kb.className="kipbilgi bekle";
+    kb.innerHTML="⏸ <b>OTONOM SEÇİLİ — görev BAŞLAMADI.</b><br>"+
+      "Sıra: gaz çubuğunu DİBE çek → <b>ARM</b> → <b>GÖREVİ BAŞLAT</b>.";
+  } else if(k.kaynak=="OTONOM"){
+    kb.className="kipbilgi oto";
+    kb.innerHTML="🚀 <b>GÖREV SÜRÜYOR</b> — "+(_g0.durum||"?")+
+      (_g0.durum=="KALKIS"
+        ? ("  tırmanıyor "+(_g0.yukseklik!=null?_g0.yukseklik.toFixed(0):"?")+
+           " m / hedef "+(d.kalkis_alt??35)+" m") : "");
+  } else {
+    kb.className="kipbilgi kotu";
+    kb.innerHTML="⛔ <b>GÖREV BAŞLATILDI ama güdüm SÜRMÜYOR</b> — sebep: <b>"+
+      (k.sebep&&k.sebep!="-"?k.sebep:"?")+"</b>";
   }
   const di = d.inis||{};
   const inisK = (k.inis_kilidi===true);
@@ -1123,6 +1163,14 @@ function gosterim(d){
     sat("çubuk T/P/R/Y",(k.komut
         ?k.komut.map(v=>(v>=0?"+":"")+v.toFixed(2)).join("  ")
         :"—"))+
+    // ⛔ ARM KAPISI GÖRÜNÜR OLSUN: uçuş kartı gaz ≤ ~1050 µs olmadan
+    //   arm etmez. Panelin sanal gaz çubuğu ORTADA (1500 µs) başlıyor;
+    //   sahada "ARM'a bastım, motorlar dönmedi" bundan oldu.
+    sat("gaz kanalı", (k.komut
+        ? (Math.round(1500+k.komut[0]*512)+" µs"+
+           (k.komut[0]<=-0.88 ? "  <span class=iyi>✔ arm edilebilir</span>"
+                              : "  <span class=kotu2>⛔ ARM İÇİN DİBE ÇEK</span>"))
+        : "—"))+
     sat("dikey iniş",(di.aktif
         ?('<b class=orta>'+di.asama+'</b>  gaz çubuğu '+
           (di.gaz_cubugu??0).toFixed(2)+" / hedef "+(di.hedef_cubuk??0)+
@@ -1336,6 +1384,15 @@ class _Islem(BaseHTTPRequestHandler):
                          arm=(bool(g["arm"]) if "arm" in g else None),
                          otonom_izin=bool(g.get("izin", False)))
             return self._yaz(200, "application/json", b'{"ok":1}')
+        if self.path == "/api/gorev" and ks is not None:
+            # ⛔ GÖREV KİPTEN AYRI: OTONOM seçmek görevi BAŞLATMAZ.
+            #   Teknik sebep de var — uçuş kartı gaz aşağıda değilken
+            #   ARM etmez; güdüm hemen tırmanış gazı verirse arm imkânsız.
+            return self._yaz(200, "application/json",
+                             json.dumps({"ok": 1,
+                                         "gorev": ks.gorev_ayarla(
+                                             bool(g.get("ac", False)))}
+                                        ).encode())
         if self.path == "/api/arm" and ks is not None:
             # ⛔ ARM MANDALI. Panelden her kipte ayarlanabilir; otonomda
             #   kumanda yok sayıldığı için panel TEK arm yetkisidir.

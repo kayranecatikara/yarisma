@@ -137,12 +137,23 @@ yanlış olur; `DOW_KAM_W/H`'yi düzelt.
 
 1. **`KÖKEN KUR`** — araç yerdeyken. Mesajda koordinatın doğru
    çıktığını gör. Bütün metre hesabı buna göre.
-2. **`ARM`** — mandal: bir kez bas, arm olur; tekrar bas, disarm olur.
+2. **`OTONOM`** — yalnız **kipi** seçer, görevi BAŞLATMAZ.
+3. ⛔ **Sol pad'deki GAZ çubuğunu EN DİBE çek.** Uçuş kartı gaz
+   ≤ ~1050 µs olmadan **ARM ETMEZ** (`min_check`). Panelin sanal gaz
+   çubuğu açılışta ORTADA (0.00 = 1500 µs) durur ve merkeze DÖNMEZ —
+   çektiğin yerde kalır. Panelde `gaz kanalı` satırı
+   `✔ arm edilebilir` yazmalı.
+4. **`ARM`** — mandal: bir kez bas arm olur, tekrar bas disarm olur.
    Onay ister (motorlar dönecek). ⛔ **Pervaneler çıkarılı olsun.**
-3. **`OTONOM`** — görevi başlatan tek düğme budur. Kalkış uyarısını
-   onaylarsın; araç `KALKIS_VZ` ile `KALKIS_ALT`'a tırmanır, sonra
-   `ISTASYON`a geçip hedefe yönelir.
-4. **Haritadan hedefi sürükle**; sağdaki kaydırıcıyla irtifayı ver.
+5. **`GÖREVİ BAŞLAT`** — bu düğme YALNIZ otonom kipte görünür ve yalnız
+   araç ARM'ken çalışır. Araç `KALKIS_VZ` ile `KALKIS_ALT`'a tırmanır,
+   sonra `ISTASYON`a geçip hedefe yönelir. Aynı düğme `GÖREVİ DURDUR`
+   olur.
+6. **Haritadan hedefi sürükle**; sağdaki kaydırıcıyla irtifayı ver.
+
+> ⛔ **SERT AYRIM:** `MANUEL`'e basmak görevi DURDURUR ve `OTONOM`'a
+> dönmek onu kendiliğinden geri GETİRMEZ. Otonomdayken sanal çubuk
+> alanı grilenir ve tıklanamaz.
 
 **Ön uçuş listesi 8/8 olmalı.** Değilse eksik madde kırmızı yazar.
 
@@ -155,6 +166,7 @@ yanlış olur; `DOW_KAM_W/H`'yi düzelt.
 | alan | beklenen |
 |---|---|
 | kip şeridi | `🚀 GÖREV SÜRÜYOR — KALKIS tırmanıyor … m` |
+| `gaz kanalı` | ARM'dan önce `✔ arm edilebilir` |
 | `kaynak` | `OTONOM`, `sebep` boş |
 | `güdüm` | `KALKIS` → `ISTASYON` → (10 tespitte) `GORSEL` |
 | `telemetri yaşı` | gps/duruş **< 0.1 s** |
@@ -207,6 +219,7 @@ hangi şartın düştüğünü söyler:
 | `pilot_vetosu` | panel izin göndermiyor | `MANUEL` → tekrar `OTONOM` |
 | `teslim_suresi` | 3 s'dir insan girdisi yok | panel sekmesini öne al |
 | `paket_kesildi` | ne panel ne kumanda | panel sekmesini yenile |
+| `gorev_baslamadi` | OTONOM seçili ama görev başlatılmamış | gaz dibe → `ARM` → `GÖREVİ BAŞLAT` |
 | `-` ve kip `MANUEL` | OTONOM'a hiç geçilmemiş | `OTONOM`'a bas |
 
 **Tek satırlık tam teşhis:**
