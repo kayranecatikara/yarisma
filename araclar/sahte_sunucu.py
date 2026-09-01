@@ -215,6 +215,8 @@ class Sunucu(BaseHTTPRequestHandler):
     kadi = "hamidiye"
     sifre = "Z8vN1cR5tY"
     hedef_takim = 1
+    #: en küçük paket aralığı (s). 0.5 = 2 Hz = YARIŞMANIN GERÇEK SINIRI.
+    hiz_siniri = 0.5
     #: bize gelen SON telemetri (harita sayfası aracın yerini bundan bilir)
     son_telem = {}
     #: GCS panelinden yansıtılan durum (arka planda 5 Hz çekilir)
@@ -302,7 +304,7 @@ class Sunucu(BaseHTTPRequestHandler):
                 simdi = time.monotonic()
                 aralik = simdi - Sunucu._son_telem[0]
                 Sunucu._son_telem[0] = simdi
-            if aralik < 0.5:
+            if aralik < Sunucu.hiz_siniri:
                 Sunucu.sayac["red_hiz"] += 1
                 self.send_response(400)
                 self.send_header("Content-Length", "1")
@@ -677,6 +679,10 @@ def main():
                    help="(rastgele desende) kaç saniyede bir ışınlansın")
     a.add_argument("--tohum", type=int, default=1,
                    help="rastgeleliğin tohumu — aynı tohum aynı senaryo")
+    a.add_argument("--hz-siniri", type=float, default=2.0,
+                   help="⛔ istemcinin aşamayacağı Hz. VARSAYILAN 2.0 = "
+                        "yarışmanın GERÇEK sınırı. Yükseltmek testi "
+                        "yarışmadan FARKLI kılar")
     a.add_argument("--takim", type=int, default=1,
                    help="hedef İHA'nın takım numarası")
     a.add_argument("--irtifa", type=float, default=80.0)
@@ -693,6 +699,7 @@ def main():
     a = a.parse_args()
 
     Sunucu.hedef_takim = a.takim
+    Sunucu.hiz_siniri = 1.0 / max(0.1, a.hz_siniri)
     Sunucu.panel_adres = a.panel
     Sunucu.hedef = Hedef(desen=a.desen, irtifa=a.irtifa, uzaklik=a.uzaklik,
                          kerteriz=a.kerteriz, hiz=a.hiz, degisim=a.degisim,
@@ -745,7 +752,13 @@ def main():
               % (a.gurultu, a.sicrama_m, a.sicrama, a.kesinti_sure,
                  a.kesinti, a.gecikme))
     print()
-    print("  ⛔ Telemetri BİÇİMİ ve 2 Hz sınırı GERÇEKTEN denetlenir.")
+    if a.hz_siniri > 2.0 + 1e-9:
+        print("  ⚠⚠ HIZ SINIRI %.1f Hz'e YÜKSELTİLDİ — yarışma sınırı 2 Hz."
+              % a.hz_siniri)
+        print("     Bu koşu hedef tazeliği bakımından YARIŞMAYI TEMSİL ETMEZ.")
+    else:
+        print("  ⛔ Telemetri BİÇİMİ ve %g Hz sınırı GERÇEKTEN denetlenir."
+              % a.hz_siniri)
     print("  Ctrl+C ile durur.")
     print("=" * 70)
 

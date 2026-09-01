@@ -46,6 +46,18 @@ class SunucuCfg:
     TAKIM_NO = int(os.environ.get("DOW_TAKIM_NO", "2"))
     #: Gönderim hızı. ⛔ 2.0'ı ASLA aşma (doküman §7: 400 + hata kodu 3).
     GONDER_HZ = float(os.environ.get("DOW_SUNUCU_HZ", 1.8))
+    #: ⛔⛔ GÖNDERME HIZI TAVANI — VARSAYILAN 2.0 ve YARIŞMADA BU KALIR.
+    #   Haberleşme dokümanı §7: 2 Hz üzeri istek HTTP 400 + hata kodu 3
+    #   ile REDDEDİLİR. Bu tavan bizi o reddedilmeden korur; ölçüldü
+    #   (2026-09-01): tek başına koşan bir istemci sınırı aşınca gerçek
+    #   sunucudan `400` gövde `3` aldı.
+    #
+    #   ⚠ YALNIZ SAHTE SUNUCUYA KARŞI YAPILAN YER TESTİNDE yükseltilir.
+    #     Hedefin konumu bize telemetri YANITINDA geldiği için hedef
+    #     tazeliği = gönderme hızıdır; yerde hedefi elle sürüklerken
+    #     1.8 Hz kaba kalıyor. Ama yükseltilmiş bir tavanla yapılan test
+    #     ARTIK YARIŞMAYI TEMSİL ETMEZ — sahada hedef 1.8 Hz gelecek.
+    HZ_TAVAN = float(os.environ.get("DOW_SUNUCU_HZ_TAVAN", 2.0))
     ZAMAN_ASIMI = float(os.environ.get("DOW_SUNUCU_ASIM", 2.0))
 
 
@@ -164,12 +176,24 @@ class SunucuIstemcisi:
             self._is.join(timeout=2.0)
 
     def _dongu(self):
-        periyot = 1.0 / max(0.1, min(2.0, self.cfg.GONDER_HZ))
+        _tavan = max(0.1, float(getattr(self.cfg, "HZ_TAVAN", 2.0)))
+        periyot = 1.0 / max(0.1, min(_tavan, self.cfg.GONDER_HZ))
+        if self.cfg.GONDER_HZ > 2.0 + 1e-9:
+            print("  ⚠⚠ SUNUCU GÖNDERME HIZI %.2f Hz — YARIŞMA SINIRI 2 Hz."
+                  % min(_tavan, self.cfg.GONDER_HZ))
+            print("     Gerçek sunucu bunu HTTP 400 + hata 3 ile REDDEDER.")
+            print("     Bu ayar YALNIZ sahte sunucuya karşı yer testi içindir.")
+        _asgari_aralik = 1.0 / _tavan
         while self._calisiyor:
             t0 = time.monotonic()
             # ⛔ HIZ KAPISI: doküman 2 Hz üstünü CEZALANDIRIYOR. Bu denetim
             #   periyodun yanında İKİNCİ bir güvencedir (zamanlayıcı kayarsa).
-            if (t0 - self._son_gonderim) < 0.5:
+            #   ⛔ ESKİDEN 0.5 SABİT YAZILIYDI ve tavanı yükseltmek İŞE
+            #     YARAMIYORDU: periyot 0.333 s'ye inse bile bu kapı 0.5 s
+            #     dayatıyordu, ölçüldü (2026-09-02): istenen 3.0 Hz,
+            #     gerçekleşen 1.89 Hz. Artık aynı tavandan türer, yani
+            #     VARSAYILANDA (2.0) davranış BİT BİT AYNI: 1/2.0 = 0.5.
+            if (t0 - self._son_gonderim) < _asgari_aralik:
                 self.sayac["hiz_ihlali"] += 1
                 time.sleep(0.05)
                 continue

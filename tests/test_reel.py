@@ -1529,12 +1529,22 @@ def test_R51_sunucu_2Hz_USTUNE_CIKMIYOR():
         "varsayılan gönderim hızı 2 Hz'i aşıyor — sunucu 400 döndürür")
     assert SunucuCfg.GONDER_HZ >= 1.0, (
         "doküman EN AZ 1 Hz istiyor")
+    # ⛔ TAVAN VARSAYILANI 2.0 OLMALI. (2026-09-02: tavan ayarlanabilir
+    #   yapıldı ki sahte sunucuya karşı yer testinde hedef tazeliği
+    #   artırılabilsin — ama VARSAYILAN yarışma sınırında kalmalı, yoksa
+    #   env ile yanlışlıkla 10 Hz verilince sahada ceza alırız.)
+    assert abs(SunucuCfg.HZ_TAVAN - 2.0) < 1e-9, (
+        "gönderme hızı tavanının VARSAYILANI 2.0 olmalı — sunucu üstünü "
+        "HTTP 400 + hata 3 ile reddeder")
     # kod ayrıca çalışma anında da kırpıyor mu
     import inspect
     kaynak = inspect.getsource(SunucuIstemcisi._dongu)
-    assert "min(2.0" in kaynak, (
-        "gönderim hızı çalışma anında 2.0 ile SINIRLANMALI — env ile "
-        "yanlışlıkla 10 Hz verilirse yarışmada ceza alırız")
+    assert "min(_tavan" in kaynak and "HZ_TAVAN" in inspect.getsource(SunucuCfg), (
+        "gönderim hızı çalışma anında tavanla SINIRLANMALI")
+    # ⛔ tavanı yükseltmek AÇIK BİR KARAR olmalı ve UYARI basmalı
+    assert "YARIŞMA SINIRI 2 Hz" in kaynak, (
+        "tavan aşıldığında operatör UYARILMIYOR — yer testi ayarıyla "
+        "sahaya çıkma riski")
 
 
 # ---------------------------------------------------------------- R52
