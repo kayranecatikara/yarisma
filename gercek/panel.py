@@ -429,7 +429,7 @@ button.armli{background:#166534;border-color:#4ade80}
         <button id=b_manuel class=aktif>MANUEL</button>
         <button id=b_otonom>OTONOM</button>
         <button id=b_rtl class=rtl>RTL — EVE DÖN</button>
-        <button id=b_arm class=arm>ARM (BASILI TUT)</button>
+        <button id=b_arm class=arm>ARM</button>
       </div>
       <div class=dugmeler style="margin-top:8px">
         <button id=b_gorev class=gorev>🚀 GÖREVİ BAŞLAT (OTONOM KALKIŞ)</button>
@@ -498,8 +498,8 @@ let jsHata="";
 window.addEventListener("error",e=>{ jsHata="JS: "+(e.message||"hata"); });
 window.addEventListener("unhandledrejection",e=>{
   jsHata="JS(promise): "+((e.reason&&e.reason.message)||e.reason||"hata"); });
-let S={thr:0,yaw:0,pitch:0,roll:0,arm:false,izin:false};
-let kumandaVar=false, armBasili=false, kmdYokSay=false;
+let S={thr:0,yaw:0,pitch:0,roll:0,izin:false};
+let kumandaVar=false, kmdYokSay=false;
 // ⛔ PANEL BEKÇİSİ: POST'lar gerçekten gidiyor mu? Donma SESSİZ olmamalı —
 //   operatör "arayüz dondu mu, kumanda mı devraldı" diye tahmin etmemeli.
 // ⛔⛔ `post` — PANELDEKİ TÜM DÜĞMELERİN ORTAK YOLU.
@@ -613,15 +613,17 @@ document.getElementById("b_gorev").onclick=async()=>{
   const d=window._sonDurum||{};
   const k=d.komut||{};
   if(!k.arm){
-    alert("⛔ ARAÇ ARM DEĞİL.\n\nÖnce KUMANDANIN arm anahtarını aç "+
-          "(panel düğmesi basılı tutma ister, uçuşta kullanılmaz).");
+    alert("⛔ ARAÇ ARM DEĞİL.\n\nÖnce ARM düğmesine bas (mandaldır: "+
+          "bir kez basmak yeter).\nMANUEL kipteysen kumandanın arm "+
+          "anahtarı da kullanılabilir.");
     return;
   }
   if(!confirm("🚀 GÖREVİ BAŞLAT\n\nAraç KENDİ KALKACAK:\n"+
-              "  · dikey tırmanış 3 m/s ile 40 m'ye\n"+
+              "  · dikey tırmanış 3 m/s ile 35 m'ye\n"+
               "  · sonra hedefe yönelip GPS ile takip\n\n"+
               "⛔ Pervanelerin takılı ve alanın boş olduğunu doğrula.\n"+
-              "⛔ Kumanda elinde olsun — çubuğa dokunmak otonomu keser.\n\n"+
+              "⛔ OTONOMDA KUMANDA YOK SAYILIR: durdurmak için panelde\n"+
+              "   MANUEL, DİKEY İNİŞ ya da PAKET KES kullan.\n\n"+
               "Başlasın mı?")) return;
   await post("/api/kip",{kip:"OTONOM"});
 };
@@ -719,13 +721,20 @@ document.getElementById("b_kmd").onclick=(e)=>{
   e.target.classList.toggle("aktif",kmdYokSay);
   e.target.textContent=kmdYokSay?"KUMANDA YOK SAYILIYOR":"KUMANDAYI YOK SAY";
 };
-// ⛔ ARM BASILI TUTMA İSTER — tek tıkla yanlışlıkla arm edilemesin
+// ⛔⛔ ARM ARTIK MANDAL (kullanıcı kararı 2026-09-02).
+//   ESKİ HÂLİ basılı tutma istiyordu: düğmeyi bıraktığın an disarm
+//   oluyordu, yani uçuş boyunca fareyi basılı tutman gerekirdi. Kullanıcı:
+//   "bir kere basıp bıraktığımızda arm olsun, bir daha basınca disarm."
+//   Kaza koruması: DISARM->ARM geçişi onay ister (motorlar döner);
+//   ARM->DISARM anında ve onaysızdır — durdurmak hızlı olmalı.
 const bArm=document.getElementById("b_arm");
-bArm.addEventListener("pointerdown",()=>{armBasili=true;S.arm=true;});
-const armBirak=()=>{armBasili=false;S.arm=false;};
-bArm.addEventListener("pointerup",armBirak);
-bArm.addEventListener("pointerleave",armBirak);
-bArm.addEventListener("pointercancel",armBirak);
+bArm.onclick=async()=>{
+  const su=((window._sonDurum||{}).komut||{}).arm===true;
+  if(!su && !confirm("⚠ ARM — MOTORLAR DÖNMEYE BAŞLAYACAK.\n\n"+
+                     "Pervanelerin durumunu ve çevreni doğrula.\n\nARM edilsin mi?"))
+    return;
+  await post("/api/arm",{ac:!su});
+};
 
 // ⛔ ESKİ HÂLİ setInterval(...,33) İDİ VE GERİ BASINÇ YOKTU: önceki istek
 //   bitmeden yenisi ateşleniyordu. Tarayıcının bağlantı havuzu (kaynak
@@ -962,6 +971,11 @@ function gosterim(d){
   rozet("r_kip",  k.kip=="OTONOM"?null:true, k.kip||"—");
   rozet("r_insan", k.insan?true:false, "girdi: "+(k.insan||"YOK"));
   rozet("r_arm",  !!k.arm, k.arm?"ARM":"DISARM");
+  // ⭐ MANDAL DURUMU DÜĞMEDE GÖRÜNÜR — operatör "acaba arm mı" diye
+  //   rozete bakmak zorunda kalmasın.
+  const bA=document.getElementById("b_arm");
+  if(bA){ bA.textContent = k.arm ? "DISARM" : "ARM";
+          bA.classList.toggle("aktif", k.arm===true); }
   // ⛔ İNİŞ KİLİDİ — panelde SESSİZ kalamaz: operatör niye komut
   //   gitmediğini görmeden anlayamaz.
   // ---- VİDEO KAYDI ----
@@ -1271,9 +1285,15 @@ class _Islem(BaseHTTPRequestHandler):
         if self.path == "/api/manuel" and ks is not None:
             ks.panel_yaz(float(g.get("thr", 0.0)), float(g.get("pitch", 0.0)),
                          float(g.get("roll", 0.0)), float(g.get("yaw", 0.0)),
-                         arm=bool(g.get("arm", False)),
+                         arm=(bool(g["arm"]) if "arm" in g else None),
                          otonom_izin=bool(g.get("izin", False)))
             return self._yaz(200, "application/json", b'{"ok":1}')
+        if self.path == "/api/arm" and ks is not None:
+            # ⛔ ARM MANDALI. Panelden her kipte ayarlanabilir; otonomda
+            #   kumanda yok sayıldığı için panel TEK arm yetkisidir.
+            yeni_arm = ks.arm_ayarla(bool(g.get("ac", False)))
+            return self._yaz(200, "application/json",
+                             json.dumps({"ok": 1, "arm": yeni_arm}).encode())
         if self.path == "/api/kip" and ks is not None:
             yeni_kip = str(g.get("kip", "MANUEL")).upper()
             try:
@@ -1415,7 +1435,7 @@ class _Islem(BaseHTTPRequestHandler):
         if c == "cubuk" and ks is not None:
             ks.panel_yaz(float(m.get("thr", 0.0)), float(m.get("pitch", 0.0)),
                          float(m.get("roll", 0.0)), float(m.get("yaw", 0.0)),
-                         arm=bool(m.get("arm", False)),
+                         arm=(bool(m["arm"]) if "arm" in m else None),
                          otonom_izin=bool(m.get("izin", False)))
         elif c == "kip" and ks is not None:
             try:

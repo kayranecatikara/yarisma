@@ -372,6 +372,14 @@ class Sunucu(BaseHTTPRequestHandler):
                                                   dg - h.elle[1]) / dt)
             h._elle_t = simdi
             h.elle[0], h.elle[1] = k, dg
+            # ⭐ Z EKSENİ: irtifa kaydırıcısından (kullanıcı isteği).
+            #   Hedefin irtifası dikey güdümü sürer: istasyon noktası
+            #   hedefin 6 m altında kurulur (MENZIL 8 × ALT_ORAN 0.75).
+            if "irtifa" in g:
+                try:
+                    h.irtifa = max(0.0, min(300.0, float(g["irtifa"])))
+                except (TypeError, ValueError):
+                    pass
             return self._yaz(200, {"ok": True})
 
         if self.path == "/api/kilitlenme_bilgisi":
@@ -412,6 +420,14 @@ HARITA = r"""<!doctype html><meta charset=utf-8>
  code{background:#1c2430;padding:1px 5px;border-radius:4px;color:#9fb4cc}
 </style>
 <canvas id=c width=660 height=660></canvas>
+<div style="display:flex;flex-direction:column;align-items:center;gap:8px">
+  <div style="color:#9fb4cc;font-size:12px">HEDEF<br>İRTİFA</div>
+  <input id=irt type=range min=0 max=120 step=1 value=40
+         style="writing-mode:vertical-lr;direction:rtl;height:520px;width:32px">
+  <div id=irtv style="font-size:20px;font-weight:700;color:#fbbf24">40 m</div>
+  <div id=irtd style="color:#7c8ba1;font-size:11px;text-align:center">
+    araç<br>— m</div>
+</div>
 <div class=yan>
  <h1>Hedefi sürükle — komut nereyi gösteriyor?</h1>
  <div class=kutu>
@@ -528,6 +544,13 @@ async function tik(){
   g("gudum",(p.gudum||{}).durum||"—");
   g("arm",(p.komut||{}).arm===true?"ARM":"disarm");
   g("yaw",a?a.yaw.toFixed(1)+"°":"—");
+  document.getElementById("irtd").innerHTML =
+    "araç<br>"+(a?a.irtifa.toFixed(0):"—")+" m";
+  if(D.hedef && !sIrt.matches(":active") && D.hedef.irtifa!=null
+     && Math.abs(D.hedef.irtifa-parseFloat(sIrt.value))>0.6){
+    sIrt.value=D.hedef.irtifa;
+    document.getElementById("irtv").textContent=sIrt.value+" m";
+  }
   g("cp",oc?oc.pitch.toFixed(3):"—"); g("cr",oc?oc.roll.toFixed(3):"—");
   g("cy",oc?oc.yaw.toFixed(3):"—");   g("ct",oc?oc.throttle.toFixed(3):"—");
   if(a&&h){
@@ -596,6 +619,15 @@ async function tik(){
   }
   ciz();
 }
+const sIrt=document.getElementById("irt");
+function irtGonder(){
+  document.getElementById("irtv").textContent=sIrt.value+" m";
+  const h=D.hedef||{};
+  fetch("/api/elle",{method:"POST",body:JSON.stringify(
+    {kuzey:h.kuzey||0, dogu:h.dogu||0, irtifa:parseFloat(sIrt.value)})})
+    .catch(()=>{});
+}
+sIrt.addEventListener("input",irtGonder);
 setInterval(tik,150); tik();
 </script>
 """

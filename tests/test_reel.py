@@ -935,10 +935,24 @@ def test_R35_GUDUM_ARM_EDEMEZ_yapisal():
     k.otonom_yaz(1.0, 1.0, 1.0, 1.0)
     k.tik()
     assert _son_kanallar(sp)["arm"] == C.CRSF_MIN, (
-        "pilot arm etmemişken ARM kanalı yüksek gitti")
+        "insan arm etmemişken ARM kanalı yüksek gitti")
+    # ⛔ OTONOMDA KUMANDANIN ANAHTARI ARM ETMEZ (kullanıcı kararı
+    #   2026-09-02): otonom sürerken kumanda hiçbir şeyi değiştiremez.
     km.c.arm = True
     k.tik()
-    assert _son_kanallar(sp)["arm"] == C.CRSF_MAX, "pilot arm etti, geçmedi"
+    assert _son_kanallar(sp)["arm"] == C.CRSF_MIN, (
+        "OTONOM kipinde kumandanın arm anahtarı aracı arm etti — "
+        "otonomda kumanda karışmamalı")
+    # arm YALNIZ insandan gelir: panelde mandal
+    k.arm_ayarla(True)
+    k.tik()
+    assert _son_kanallar(sp)["arm"] == C.CRSF_MAX, "panelden arm geçmedi"
+    # ...ve MANUEL kipte kumandanın anahtarı DEĞİŞİNCE mandalı sürer
+    k.kip_sec("MANUEL")
+    km.c.arm = False
+    k.tik()
+    assert _son_kanallar(sp)["arm"] == C.CRSF_MIN, (
+        "MANUEL kipte kumandanın arm anahtarı disarm etmedi")
 
 
 # ---------------------------------------------------------------- R36
@@ -1013,6 +1027,7 @@ def test_R39_kumanda_KOPARSA_otonom_SURUYOR_arm_KORUNUYOR():
     """
     c = KomutCfg
     sp, bag, km, k = _duzenek(arm=True, kip_anahtari=True)
+    k.arm_ayarla(True)          # ARM artık MANDAL (2026-09-02)
     k.kip_sec("OTONOM")
     t0 = 5000.0
     k.otonom_yaz(0.2, 0.0, 0.0, 0.0, t=t0)
@@ -1050,6 +1065,7 @@ def test_R40_DISARM_asla_emniyet_tedbiri_olarak_gonderilmiyor():
     for kopuk, bayat, veto in [(a, b, v) for a in (0, 1) for b in (0, 1)
                                for v in (0, 1)]:
         sp, bag, km, k = _duzenek(arm=True, kip_anahtari=not veto)
+        k.arm_ayarla(True)      # ARM artık MANDAL (2026-09-02)
         k.kip_sec("OTONOM")
         t0 = 7000.0
         k.otonom_yaz(0.3, 0, 0, 0, t=t0 - (10.0 if bayat else 0.0))
@@ -1371,6 +1387,7 @@ def test_R47_UCTAN_UCA_beyin_gercek_baglantiyla_UCUYOR():
         ks.devir_geri_cagirma = (
             lambda kaynak, thr0: dik.sifirla(thr0) if kaynak == "OTONOM"
             else dik.durdur())
+        ks.arm_ayarla(True)         # ARM artık MANDAL (2026-09-02)
         ks.kip_sec("OTONOM")
         fazlar, t, dt = [], 0.0, 0.02
         for i in range(1500):               # 30 s
@@ -3439,7 +3456,7 @@ def test_R119b_DIKEY_INIS_asamalar_ve_ARM_dokunulmazligi():
 
 
 # ---------------------------------------------------------------- R120
-def test_R120_KIP_YALNIZ_PANELDEN_ve_ARM_DAIMA_KUMANDADAN():
+def test_R120_KIP_YALNIZ_PANELDEN_ve_ARM_MANDAL():
     """⛔⛔ BU BEKÇİ TERSİNE ÇEVRİLDİ (kullanıcı kararı 2026-09-02).
 
     ESKİ HÂLİ "çubuk oynayınca otonom MANDALLI olarak düşer" davranışını
@@ -3493,28 +3510,40 @@ def test_R120_KIP_YALNIZ_PANELDEN_ve_ARM_DAIMA_KUMANDADAN():
         "olmalıydı (sebep=%s)" % d["sebep"])
     assert ks.kip == "OTONOM"
 
-    # --- 2: ARM KUMANDANIN ANAHTARINDAN, panel arm=False dese bile ---
-    assert d["arm"] is True, (
-        "kumandanın arm anahtarı AÇIK ama arm okunmadı — panelin basılı "
-        "tutma düğmesi kazandı; araç otonom uçuşta ARM KALAMAZ")
-    # hâkimiyet süresi geçsin: kumanda artık 'hâkim' değil ama ARM YİNE ONDAN
+    # --- 2: ARM BİR MANDAL — PANELDEN, HER KİPTE ---
+    #   Kullanıcı (2026-09-02): "arma basılı tutarken arm olmasın, bir kere
+    #   basıp bıraktığımızda arm olsun, bir daha basınca disarm olsun."
+    assert d["arm"] is False, (
+        "kumandanın arm anahtarı OTONOM kipinde aracı arm etti — otonomda "
+        "kumanda hiçbir şeyi değiştirmemeli")
+    ks.arm_ayarla(True)
+    assert _tik()["arm"] is True, "panelden ARM geçmedi"
+    # ⛔ MANDAL: panel çubuk akışı arm GÖNDERMESE BİLE arm KALIR.
+    #   (Eski hâlde panelin düğmesi bırakılınca disarm oluyordu.)
     _t.sleep(ks.cfg.KMD_HAKIMIYET_S + 0.4)
     d = _tik()
     assert d["kmd_hakim"] is False, "hâkimiyet süresi geçmedi, sınama geçersiz"
     assert d["arm"] is True, (
-        "kumanda hâkim değilken arm anahtarı yok sayıldı — 2026-09-02'de "
-        "ölçülen kısır döngü geri geldi")
-    # anahtar KAPANINCA arm o tikte düşer — pilotun dur yolu budur
+        "panel arm göndermeyi bıraktı ve mandal düştü — basılı tutma "
+        "davranışı geri gelmiş")
+    # OTONOM'da kumandanın anahtarını kapatmak arm'ı DÜŞÜRMEZ
     km.c.arm = False
-    assert _tik()["arm"] is False, (
-        "kumandanın arm anahtarı kapandı ama araç arm kaldı — pilotun "
-        "aracı durdurma yolu yok")
+    assert _tik()["arm"] is True, (
+        "OTONOM kipinde kumandanın anahtarı arm'ı düşürdü")
+    ks.arm_ayarla(False)
+    assert _tik()["arm"] is False, "panelden DISARM geçmedi"
 
-    # --- 3: MANUEL/OTONOM YALNIZ PANELDEN ---
+    # --- 3: MANUEL KİPTE kumandanın anahtarı DEĞİŞİNCE mandalı sürer ---
     ks.kip_sec("MANUEL")
     assert _tik()["kaynak"] == "MANUEL"
+    km.c.arm = True                      # KENAR: False -> True
+    assert _tik()["arm"] is True, (
+        "MANUEL kipte kumandanın arm anahtarı mandalı sürmedi")
+    km.c.arm = False                     # KENAR: True -> False
+    assert _tik()["arm"] is False, (
+        "MANUEL kipte kumandanın arm anahtarı disarm etmedi")
     ks.kip_sec("OTONOM")
-    km.c.arm = True
+    ks.arm_ayarla(True)
     assert _tik()["kaynak"] == "OTONOM", "panelden OTONOM geri gelmedi"
 
     # --- 4: VETO ANAHTARI hâlâ keser ve geri açılınca DÖNER (R53) ---

@@ -128,7 +128,17 @@ class KomutSureci:
         self._son_manuel_thr = 0.0
         self._oto = None
         self._oto_kilit = threading.Lock()
-        self._son_arm = False
+        # ⛔⛔ ARM ARTIK BİR MANDAL (kullanıcı kararı 2026-09-02).
+        #   ESKİ HÂLİ: panelin ARM düğmesi BASILI TUTMA istiyordu ve arm
+        #   her tikte `cubuk.arm`dan okunuyordu. Kullanıcı: "arma basılı
+        #   tutarken arm olmasın, bir kere basıp bıraktığımızda arm olsun,
+        #   bir daha basınca disarm olsun."
+        #   Mandalı DEĞİŞTİREBİLENLER:
+        #     · panel  : `arm_ayarla()` (düğme, her kipte)
+        #     · kumanda: arm anahtarı DEĞİŞTİĞİNDE — YALNIZ MANUEL kipte
+        self._arm = False
+        #: kumanda arm anahtarının önceki hâli (KENAR yakalamak için)
+        self._kmd_arm_onceki = None
         self._son_kmd_t = 0.0
         self._veto_izin = False        # pilot izin vermeden otonom YOK
         # ⛔⛔ FAILSAFE İNİŞ KİLİDİ (kullanıcı kararı 2026-08-30).
@@ -197,7 +207,7 @@ class KomutSureci:
         """
         from .kumanda import Cubuklar
         self._panel = Cubuklar(throttle, pitch, roll, yaw,
-                               arm=self._son_arm if arm is None else bool(arm),
+                               arm=self._arm if arm is None else bool(arm),
                                kip_anahtari=(self._veto_izin
                                              if otonom_izin is None
                                              else bool(otonom_izin)))
@@ -260,6 +270,20 @@ class KomutSureci:
     def inis_kilitli(self):
         return self._inis_kilidi
 
+    def arm_ayarla(self, ac):
+        """ARM mandalını panelden ayarla. `ac` True/False.
+
+        ⛔ HER KİPTE ÇALIŞIR: kullanıcı otonom uçuşta da panelden disarm
+           edebilmeli — otonomdayken kumanda yok sayıldığı için (bkz.
+           `tik`) panel TEK arm yetkisidir.
+        """
+        self._arm = bool(ac)
+        return self._arm
+
+    @property
+    def arm_durumu(self):
+        return self._arm
+
     def kip_sec(self, kip):
         if kip not in ("MANUEL", "OTONOM"):
             raise ValueError("kip MANUEL ya da OTONOM olmalı: %r" % kip)
@@ -280,7 +304,7 @@ class KomutSureci:
         if self._inis_kilidi:
             self.sayac["kesilen"] += 1
             self.durum = {"kaynak": "YOK", "sebep": "failsafe_inis",
-                          "komut": None, "arm": self._son_arm,
+                          "komut": None, "arm": self._arm,
                           "insan": self.insan_kaynagi,
                           "kmd_takili": self._kmd_takili,
                           "kmd_hakim": False, "kmd_kopuk": True,
@@ -364,6 +388,20 @@ class KomutSureci:
         #     Ayrıca panelde MANUEL, DİKEY İNİŞ ve PAKET KES duruyor.
         panel = self._panel_oku(simdi)
 
+        # ⛔⛔ OTONOM'DA KUMANDA GÜDÜME KARIŞAMAZ — ama ÖLDÜĞÜNDE
+        #   yerine geçebilir. Kullanıcı (2026-09-02) kumandanın otonoma
+        #   KARIŞMASINI istemiyordu; bu iki ayrı yolla ZATEN sağlandı:
+        #     · ARM artık MANDAL; kumandanın anahtarı yalnız MANUEL kipte
+        #       ve yalnız DEĞİŞTİĞİNDE mandalı sürer (aşağıda)
+        #     · çubukla devralma tamamen SÖKÜLDÜ
+        #   Yani otonom sürerken kumanda hiçbir şeyi değiştirmez.
+        #
+        #   ⛔ ÇUBUK SEÇİMİNİ KİPE BAĞLAMADIM ve sebebi şu: otonom BAŞKA
+        #     bir sebeple düşerse (güdüm bayatladı, veto, teslim süresi)
+        #     komut İNSANA döner. O anda pilotun FİZİKSEL çubuklarına
+        #     dönmek, panelin nötr çubuklarına dönmekten emniyetlidir —
+        #     güdüm havada çökerse aracı pilot uçurmalı. Bekçiler R37 ve
+        #     R39 tam bunu koruyor ve ikisi de yaşanmış olaylardan geldi.
         if kmd_hakim:
             cubuk = kmd
             self.insan_kaynagi = "kumanda"
@@ -378,25 +416,13 @@ class KomutSureci:
         else:
             cubuk = None
             self.insan_kaynagi = ""
-        if cubuk is not None:
+        # ⛔ CANLILIK KOMUTTAN AYRI. Kumanda OTONOM'da komut VERMEZ ama
+        #   VARLIĞI sayılır: teslim süresi (hakemin (d) şartı) "ortada
+        #   müdahale edebilecek biri var mı" sorusudur, "kim sürüyor"
+        #   değil. Ayırmazsak panel bir an sussa RC KESİLİRDİ.
+        if cubuk is not None or kmd is not None:
             self._son_kmd_t = simdi
-            # ⛔⛔ ARM FİZİKSEL KUMANDADAN GELİR — HÂKİMİYETTEN BAĞIMSIZ.
-            #   ÖLÇÜLDÜ (2026-09-02, tezgâhta): kumanda TAKILI ve arm
-            #   anahtarı AÇIK olduğu hâlde, pilot çubuğa dokunmadığı için
-            #   `kmd_hakim` False kalıyordu; `cubuk` panel oluyordu ve ARM
-            #   panelin (basılı tutma isteyen) düğmesinden okunuyordu ->
-            #   arm=False. Yani otonom uçuşta araç ARM KALAMIYORDU:
-            #     · pilot çubuğa dokunmazsa -> panel hâkim -> disarm
-            #     · pilot çubuğa dokunursa  -> (eski) pilot_devraldi
-            #   Çıkışı olmayan bir kısır döngüydü ve panelin GÖREVİ BAŞLAT
-            #   düğmesi de `if(!k.arm)` yüzünden hep "ARAÇ ARM DEĞİL"
-            #   diyordu. Bir yarışma hakkı buna gitti.
-            #
-            #   ⛔ ARM BİR ANAHTARDIR, ÇUBUK DEĞİL: değeri değişmese de
-            #     ANLAMLIDIR. Hâkimiyet (kim en son oynattı) çubuklar için
-            #     doğru bir ölçüttür, anahtar için DEĞİLDİR.
-            #   Kumanda takılıysa arm ONDAN okunur; yoksa panelden.
-            self._son_arm = kmd.arm if kmd is not None else cubuk.arm
+        if cubuk is not None:
             # ⛔⛔ PİLOTUN VETO ANAHTARI — panelden seçilen kipi EZER.
             #   Pilot anahtarı kapatınca otonom O TİKTE düşer; panelin
             #   ne dediği önemsizdir. Bu, yerden güdümlü mimaride pilotun
@@ -409,6 +435,20 @@ class KomutSureci:
             #   izin kumandanın sabit -1.00'ıyla EZİLMEZ.
             if cubuk.kip_anahtari is not None:
                 self._veto_izin = bool(cubuk.kip_anahtari)
+        # --- ARM MANDALI ---
+        # ⛔ Kumandanın arm anahtarı YALNIZ MANUEL kipte ve YALNIZ
+        #   DEĞİŞTİĞİNDE (kenar) mandalı sürer. Kenar olarak okumak şart:
+        #   yoksa sabit duran anahtar, panelden verilen arm kararını her
+        #   tikte ezerdi ve panel düğmesi hiç iş görmezdi.
+        if kmd is not None:
+            _a = bool(kmd.arm)
+            if (self.kip != "OTONOM" and self._kmd_arm_onceki is not None
+                    and _a != self._kmd_arm_onceki):
+                self._arm = _a
+            self._kmd_arm_onceki = _a
+        else:
+            self._kmd_arm_onceki = None
+
         kmd_kopuk = (simdi - self._son_kmd_t) > c.KMD_ASIM_S
         # ⛔⛔ TESLİM SÜRESİ — R39 BUNU EKSİK BULDU (2026-08-29).
         #   İlk yazdığımda `KMD_TESLIM_S` denetimi yalnız BİR dalda vardı ve
@@ -479,7 +519,7 @@ class KomutSureci:
                           "kmd_hakim": False,
                           "sebep": ("teslim_suresi" if _teslimden
                                     else "paket_kesildi"),
-                          "arm": self._son_arm, "kmd_kopuk": kmd_kopuk}
+                          "arm": self._arm, "kmd_kopuk": kmd_kopuk}
             return False, self.durum
 
         # --- 3b) DEVİR BİLDİRİMİ (kaynak değiştiyse) ---
@@ -497,7 +537,7 @@ class KomutSureci:
             self._son_manuel_thr = komut[0]
 
         # --- 4) ⛔ ARM DAİMA PİLOTTAN ---
-        arm = self._son_arm
+        arm = self._arm
         # ⛔ EK KANALLAR YALNIZ OTONOM'DA: pilot elle uçarken çubuklarının
         #   anlamı uçuş kartı kipiyle değişmesin.
         _aux = self._aux if (kaynak == "OTONOM" and self._aux) else None
