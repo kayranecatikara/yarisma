@@ -200,11 +200,6 @@ def _durum():
         d["oto_cubuk"] = ks.otonom_istek
     if gb is not None and getattr(gb, "gnss_suzgec", None) is not None:
         d["gnss"] = gb.gnss_suzgec.durum()
-    try:
-        from dow.ayarlar import Ayar as _Ay
-        d["gorsel_izin"] = bool(getattr(_Ay, "GORSEL_IZIN", True))
-    except Exception:
-        d["gorsel_izin"] = True
     _vk = _D.get("video")
     if _vk is not None:
         d["video"] = _vk.durum()
@@ -377,12 +372,6 @@ button.gorev:hover{background:#047857}
 button.gorev.aktif{background:#064e3b;border-color:#6ee7b7}
 button.gorev:disabled{background:#1f2937;border-color:#374151;color:#6b7280;
   cursor:not-allowed}
-button.gorsel{background:#4c1d95;border-color:#a78bfa;color:#ede9fe;
-  font-weight:700;padding:10px;width:100%}
-button.gorsel:hover{background:#5b21b6}
-button.gorsel.acik{background:#065f46;border-color:#34d399;color:#d1fae5}
-button.gorsel.bekliyor{animation:gorselyanip 1s steps(2,end) infinite}
-@keyframes gorselyanip{50%{background:#7c3aed;border-color:#c4b5fd}}
 button.acil{background:#b91c1c;border-color:#fca5a5;color:#fff;
   font-weight:700;letter-spacing:.5px;padding:12px;width:100%;font-size:14px}
 button.acil:hover{background:#dc2626}
@@ -433,9 +422,6 @@ button.armli{background:#166534;border-color:#4ade80}
       </div>
       <div class=dugmeler style="margin-top:8px">
         <button id=b_gorev class=gorev>🚀 GÖREVİ BAŞLAT (OTONOM KALKIŞ)</button>
-      </div>
-      <div class=dugmeler style="margin-top:6px">
-        <button id=b_gorsel class=gorsel>GÖRSEL GÜDÜM</button>
       </div>
       <div class=dugmeler style="margin-top:6px">
         <button id=b_inis class=acil>⛔ FAILSAFE — DİKEY İNİŞ</button>
@@ -604,16 +590,6 @@ document.getElementById("b_gorev").onclick=async()=>{
               "⛔ Kumanda elinde olsun — çubuğa dokunmak otonomu keser.\n\n"+
               "Başlasın mı?")) return;
   await post("/api/kip",{kip:"OTONOM"});
-};
-// ⛔ GÖRSEL GÜDÜM İZNİ — kapalıyken dedektör ÇALIŞIR ve kutu ÇİZİLİR,
-//   ama araç GPS fazında KALIR. Devir yalnız operatör izin verince olur.
-//   ⛔ YARIŞMADA AÇIK OLMALI (şartname §10: görsel temas varken GPS yasak).
-document.getElementById("b_gorsel").onclick=async()=>{
-  const acik=document.getElementById("b_gorsel").classList.contains("acik");
-  if(!acik && !confirm("GÖRSEL GÜDÜME İZİN VERİLSİN Mİ?\n\n"+
-      "Araç GPS fazından çıkıp hedefi KAMERADAN takip etmeye başlar.\n"+
-      "Bundan sonra hedefin GPS'ine BAKMAZ.\n\nDevam?")) return;
-  await post("/api/gorsel_izin",{ac:!acik});
 };
 // ⛔⛔ FAILSAFE = DİKEY İNİŞ (kullanıcı kararı 2026-08-31).
 //   Nerede olursak olalım — güdüm sürerken de, pilot elle uçarken de —
@@ -978,17 +954,6 @@ function gosterim(d){
        (_g0.durum=="KALKIS" ? ("  tırmanıyor " + (_ko0.yukari??0) + " m") : ""))
     : (k.arm ? "🚀 GÖREVİ BAŞLAT (OTONOM KALKIŞ)"
              : "🚀 GÖREVİ BAŞLAT — önce ARM et");
-  // ---- GÖRSEL GÜDÜM İZNİ ----
-  const gi = (d.gorsel_izin===true);
-  const kl2 = d.kilit||{};
-  const hazir = (kl2.kilit_s||0) > 0.3;      // dedektör hedefi tutuyor
-  const bG=document.getElementById("b_gorsel");
-  bG.classList.toggle("acik", gi);
-  bG.classList.toggle("bekliyor", !gi && hazir);
-  bG.textContent = gi
-    ? ("GÖRSEL GÜDÜM: AÇIK"+((d.gudum||{}).durum=="GORSEL"?"  ·  DEVREDE":"")+"  (kapatmak için bas)")
-    : (hazir ? "⚡ GÖRSEL HAZIR — İZİN VER (bas)"
-             : "GÖRSEL GÜDÜM: KAPALI — yalnız GPS");
   const di = d.inis||{};
   const inisK = (k.inis_kilidi===true);
   const bInis=document.getElementById("b_inis");
@@ -1183,11 +1148,6 @@ function gosterim(d){
   if((d.gudum||{}).durum=="KALKIS")
     u.unshift("🚀 OTONOM KALKIŞ — araç tırmanıyor ("+((d.konum||{}).yukari??0)+" m / "+
               "hedef 40 m). Çubuğa dokunmak görevi KESER.");
-  if(d.gorsel_izin===false && (d.kilit||{}).kilit_s>0.3)
-    u.unshift("⚡ GÖRSEL GÜDÜM HAZIR — dedektör hedefi tutuyor, izin bekliyor. "+
-              "Araç şu an YALNIZ GPS ile uçuyor.");
-  if(d.gorsel_izin===false)
-    u.push("ℹ Görsel güdüm KAPALI (yalnız GPS). ⛔ Yarışmada AÇIK olmalı.");
   if(k.pilot_devraldi===true && k.kip!="OTONOM")
     u.push("ℹ PİLOT ÇUBUKLA DEVRALDI — güdüm durduruldu. Otonoma dönmek "+
            "için panelde OTONOM'a bas.");
@@ -1291,18 +1251,6 @@ class _Islem(BaseHTTPRequestHandler):
             ok, mesaj = _vk.basla()
             return self._yaz(200, "application/json", json.dumps(
                 {"ok": bool(ok), "sebep": mesaj}).encode())
-        if self.path == "/api/gorsel_izin":
-            # ⛔ Ayar bir SINIF niteliğidir; güdüm döngüsü her karede okur,
-            #   yani değişiklik BİR SONRAKİ KAREDEN itibaren geçerli olur
-            #   (uçuş sırasında, yeniden başlatmadan).
-            try:
-                from dow.ayarlar import Ayar as _Ay
-                _Ay.GORSEL_IZIN = bool(g.get("ac"))
-                return self._yaz(200, "application/json", json.dumps(
-                    {"ok": 1, "izin": _Ay.GORSEL_IZIN}).encode())
-            except Exception as e:
-                return self._yaz(200, "application/json",
-                                 json.dumps({"ok": 0, "sebep": str(e)}).encode())
         if self.path == "/api/dikey_inis":
             _in = _D.get("inis")
             if _in is None or ks is None:

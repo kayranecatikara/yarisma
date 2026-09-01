@@ -549,12 +549,13 @@ class Beyin:
             #   Tek tetik: ardışık TESPİT sayacı. Sayaç `_cikarim_yapildi`
             #   kapısının arkasında olduğu için ÇIKARIM başına artar
             #   (~9 Hz -> 10 kare ≈ 1.1 s), kontrol tiki başına DEĞİL.
-            # ⛔ OPERATÖR İZNİ (Ayar.GORSEL_IZIN). Kapalıyken tespit ve
-            #   kilit sayacı İŞLEMEYE DEVAM EDER — panel "görsel hazır"
-            #   diyebilsin — ama DEVİR OLMAZ, araç GPS fazında kalır.
-            #   Güdüm yasasına dokunulmadı: yalnız bu kapı eklendi.
+            # ⛔⛔ FAZ GEÇİŞİ OTOMATİKTİR — ELLE MÜDAHALE YOK.
+            #   Bir ara operatör izni eklenmişti (deneme uçuşunda önce
+            #   yalnız GPS görmek için). YARIŞMA KURALI BUNU YASAKLIYOR:
+            #   faz geçişine insan karar veremez. §5.12 gereği kapı
+            #   TAMAMEN SÖKÜLDÜ — kill-switch bile bırakılmadı.
+            #   Tek tetik: ardışık TESPİT sayacı (DEVIR_KARE = 10).
             if (kip != "gps" and self.durum != "GORSEL"
-                    and getattr(self.cfg, "GORSEL_IZIN", True)
                     and self._kilit >= self.cfg.DEVIR_KARE):
                 self.durum = "GORSEL"; self.hiz_I = 0.0
                 # KILIT FAZI: gorsel temas kuruldu ama HENUZ VURUS YOK.

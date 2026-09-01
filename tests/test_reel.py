@@ -4082,3 +4082,55 @@ def test_R128_TELEMETRI_SUNUCUNUN_GERCEK_SEMASINI_kullaniyor():
                encoding="utf-8").read()
     for ad in SEMA:
         assert ad in sah, "sahte_sunucu.py `%s` alanını denetlemiyor" % ad
+
+
+# ---------------------------------------------------------------- R129
+def test_R129_FAZ_GECISI_OTOMATIK_elle_mudahale_YOK():
+    """⛔⛔ YARIŞMA KURALI: faz geçişine insan karar veremez.
+
+    Deneme uçuşu için bir operatör izni eklenmişti (önce yalnız GPS
+    görmek istiyorduk). Yarışma bunu YASAKLIYOR; §5.12 gereği kapı
+    TAMAMEN söküldü — kill-switch, env anahtarı, panel düğmesi, CSS,
+    hiçbiri bırakılmadı.
+
+    Geçiş kuralı SAYAÇLARLA belirlenir:
+        DEVIR_KARE = 10   ardışık TESPİT    -> GÖRSEL
+        KAYIP_KARE = 20   ardışık TESPİTSİZ -> GPS (ISTASYON)
+        GUDUM_KIPI = hibrit  (iki yönlü geçiş açık)
+    """
+    import re
+    from dow.ayarlar import Ayar
+
+    # --- eşikler ---
+    assert Ayar.DEVIR_KARE == 10, (
+        "görsele devir eşiği %s — kural 10 ardışık tespit" % Ayar.DEVIR_KARE)
+    assert Ayar.KAYIP_KARE == 20, (
+        "GPS'e dönüş eşiği %s — kural 20 ardışık tespitsiz" % Ayar.KAYIP_KARE)
+    assert Ayar.GUDUM_KIPI == "hibrit", (
+        "kip `%s` — `gorsel`de GPS'e GERİ DÖNÜLMEZ, `hibrit` olmalı"
+        % Ayar.GUDUM_KIPI)
+
+    # --- izin kapısı HİÇBİR YERDE kalmamalı ---
+    assert not hasattr(Ayar, "GORSEL_IZIN"), "Ayar.GORSEL_IZIN hâlâ duruyor"
+    for dosya in ("dow/ana.py", "dow/ayarlar.py", "gercek/panel.py",
+                  "drone_yki.py", "baslat.sh"):
+        icerik = open(os.path.join(REEL, dosya), encoding="utf-8").read()
+        for iz in ("GORSEL_IZIN", "gorsel_izin", "b_gorsel"):
+            assert iz not in icerik, (
+                "%s içinde `%s` kalmış — §5.12: elenen özellik TAMAMEN "
+                "çıkarılır" % (dosya, iz))
+
+    # --- devir kapısı YALNIZ sayaca bakmalı ---
+    ana = open(os.path.join(REEL, "dow", "ana.py"), encoding="utf-8").read()
+    kod = "\n".join(x.split("#")[0] for x in ana.splitlines())
+    i = kod.index('self.durum = "GORSEL"')
+    kapi = kod[max(0, i - 400):i]
+    assert "DEVIR_KARE" in kapi, "devir kapısında sayaç denetimi yok"
+    assert "izin" not in kapi.lower(), (
+        "devir kapısında hâlâ bir izin denetimi var:\n%s" % kapi[-300:])
+
+    # --- GPS'e dönüş kapısı KAYIP_KARE'ye bakmalı ---
+    j = kod.index("KAYIP_KARE")
+    donus = kod[j:j + 200]
+    assert 'self.durum = "ISTASYON"' in donus, (
+        "KAYIP_KARE eşiği ISTASYON'a döndürmüyor")
