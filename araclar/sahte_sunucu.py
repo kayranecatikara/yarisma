@@ -693,11 +693,23 @@ def main():
     a.add_argument("--sicrama-m", type=float, default=40.0)
     a.add_argument("--kesinti", type=float, default=40.0, help="kaç sn'de bir")
     a.add_argument("--kesinti-sure", type=float, default=3.0)
-    a.add_argument("--gecikme", type=float, default=1.0, help="saniye")
+    a.add_argument("--gecikme", type=float, default=None,
+                   help="saniye. VARSAYILAN: 'elle' deseninde 0, "
+                        "diğerlerinde 1.0")
     a.add_argument("--gurultusuz", action="store_true",
                    help="hiç bozma — saf geometri sınaması")
     a = a.parse_args()
 
+    # ⛔⛔ `elle` DESENİNDE GECİKME 0 (2026-09-02, sahada yakalandı).
+    #   `--gecikme` `zaman_farki` alanına yazılıyor ve `hedef.py`
+    #   tazeliği `ulasma + zaman_farki` diye hesaplıyor. Varsayılan 1.0 s
+    #   ile toplam yaş ~1.3 s oluyordu; eşik `MAX_YAS_S = 1.5`. Yani
+    #   ufak bir aksama hedefi "BAYAT" yapıyor ve ön uçuş listesi
+    #   kırmızıya dönüyordu.
+    #   `elle` deseninde gecikmenin ANLAMI YOK: hedefin konumunu az önce
+    #   SEN sürükledin, "1 saniye önceki hâli" diye bir şey yok.
+    if a.gecikme is None:
+        a.gecikme = 0.0 if a.desen == "elle" else 1.0
     Sunucu.hedef_takim = a.takim
     Sunucu.hiz_siniri = 1.0 / max(0.1, a.hz_siniri)
     Sunucu.panel_adres = a.panel

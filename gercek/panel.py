@@ -230,10 +230,25 @@ def _durum():
         #   2026-09-02'de sahada bu körlük yaşandı: panel "KALKIS" yazarken
         #   güdüm aslında hiç komut üretmiyordu ve operatör sebebi
         #   göremiyordu.
+        # ⛔ KALKIŞ AYARLARI PANELE — JS'e SABİT YAZILMAZ. `DOW_KALKIS_ALT`
+        #   env'den değişiyor (35 m); sabit yazmak paneli YALANCI yapar ve
+        #   operatöre yanlış irtifa vaat eder.
+        try:
+            from dow.ayarlar import Ayar as _Ay
+            d["kalkis_alt"] = _Ay.KALKIS_ALT_M
+            d["kalkis_vz"] = _Ay.KALKIS_VZ
+        except Exception:
+            pass
         _tn = getattr(by, "tani", None) or {}
         d["gudum"] = {"durum": getattr(by, "durum", "-"),
                       "faz": getattr(by, "faz", "-"),
-                      "tik": _tn.get("durum")}
+                      "tik": _tn.get("durum"),
+                      # ⛔ GÜDÜMÜN KENDİ YÜKSEKLİĞİ — `konum.yukari` DEĞİL.
+                      #   `yukari` köken AMSL'ine göredir ve köken bozuk
+                      #   kurulursa yüzlerce metre kayar (sahada -905 m
+                      #   görüldü). Güdüm ise ilk tikteki zeminden sayar,
+                      #   o yüzden KALKIŞ mesajı BUNU göstermeli.
+                      "yukseklik": _tn.get("yukseklik")}
     # ⭐ OPTİK SABİTLERİ ve MENZİL KAPILARI — panel menzili METRE olarak
     #   yazabilsin diye. ⛔ JS'e sabit YAZILMAZ: ayar env'den değişiyor
     #   (DOW_OPTIK_MENZIL_C) ve sabit yazmak paneli YALANCI yapar.
@@ -386,6 +401,14 @@ button.video:hover{background:#3730a3}
 button.video.kayitta{background:#7f1d1d;border-color:#f87171;color:#fee2e2;
   animation:videoyanip 1.4s steps(2,end) infinite}
 @keyframes videoyanip{50%{background:#991b1b}}
+/* ⛔ SERT KİP AYRIMI (2026-09-02): otonomdayken sanal çubuklar
+   GRİLENİR ve tıklanamaz; operatör "acaba ben mi uçuruyorum" diye
+   düşünmesin. Kip bilgisi de renkle ayrılır. */
+.kumanda.pasif{opacity:.28;pointer-events:none;filter:grayscale(1)}
+.kipbilgi{padding:9px 11px;border-radius:8px;font-size:13px;line-height:1.5;
+  border:1px solid #2a3441;background:#141a22}
+.kipbilgi.oto{background:#052e21;border-color:#34d399;color:#d1fae5}
+.kipbilgi.man{background:#111827;border-color:#3b82f6;color:#bfdbfe}
 button.gorev{background:#065f46;border-color:#34d399;color:#d1fae5;
   font-weight:700;padding:13px;width:100%;font-size:14px;letter-spacing:.4px}
 button.gorev:hover{background:#047857}
@@ -426,7 +449,7 @@ button.armli{background:#166534;border-color:#4ade80}
   <div>
     <div class=kutu>
       <h3>Manuel kumanda</h3>
-      <div class=kumanda>
+      <div class=kumanda id=manuel_kutu>
         <div class=pad id=padL><div class="cizgi yatay"></div><div class="cizgi dikey"></div>
           <div class=topuz id=topuzL></div><div class=kilit>KUMANDA SÜRÜYOR<br>pilot çubuğu bıraksın,<br>3 s sonra panel geri alır</div>
           <div class=etiket>GAZ / DÖNÜŞ</div></div>
@@ -441,7 +464,7 @@ button.armli{background:#166534;border-color:#4ade80}
         <button id=b_arm class=arm>ARM</button>
       </div>
       <div class=dugmeler style="margin-top:8px">
-        <button id=b_gorev class=gorev>🚀 GÖREVİ BAŞLAT (OTONOM KALKIŞ)</button>
+        <div id=kip_bilgi class=kipbilgi>—</div>
       </div>
       <div class=dugmeler style="margin-top:6px">
         <button id=b_inis class=acil>⛔ FAILSAFE — DİKEY İNİŞ</button>
@@ -603,6 +626,23 @@ document.getElementById("b_otonom").onclick=()=>{
                 "(bu karar uçuş kaydına düşer)")) return;
     window._klZorla=true;
   }
+  // ⛔⛔ GÖREV UYARISI ARTIK BURADA. Ayrı "GÖREVİ BAŞLAT" düğmesi
+  //   kaldırıldı (aynı işi yapıyordu); otonoma geçmek görevi başlatmaktır,
+  //   o yüzden uyarı da bu düğmenin üstünde olmalı.
+  const d0=window._sonDurum||{}; const k0=d0.komut||{};
+  if(!k0.arm){
+    if(!confirm("⚠ ARAÇ ARM DEĞİL.\n\nOTONOM seçilecek ama motorlar "+
+                "dönmeyecek. Devam edilsin mi?")) return;
+  } else if((d0.gudum||{}).durum=="KALKIS"){
+    if(!confirm("🚀 GÖREV BAŞLIYOR — ARAÇ KENDİ KALKACAK\n\n"+
+                "  · dikey tırmanış "+(d0.kalkis_vz??3)+" m/s ile "+
+                (d0.kalkis_alt??35)+" m'ye\n"+
+                "  · sonra hedefe yönelip GPS ile takip\n\n"+
+                "⛔ Pervanelerin durumunu ve alanı doğrula.\n"+
+                "⛔ OTONOMDA KUMANDA GÜDÜME KARIŞMAZ: durdurmak için\n"+
+                "   panelde MANUEL, DİKEY İNİŞ ya da PAKET KES.\n\n"+
+                "Başlasın mı?")) return;
+  }
   kip("OTONOM");
 };
 // ⏺ VİDEO KAYDI — FPV görüntüsünü dosyaya yazar.
@@ -613,29 +653,11 @@ document.getElementById("b_video").onclick=async()=>{
   const r=await post("/api/video",{ac:!kayitta});
   if(!r.ok) alert("video kaydı: "+(r.sebep||"başlatılamadı"));
 };
-// 🚀 GÖREVİ BAŞLAT — otonom kalkış + takip.
-//   ⛔ ARM'ı BU DÜĞME YAPMAZ. Arm daima insandan gelir (bekçi R35);
-//     güdümün arm kanalına erişimi YOKTUR ki bir yazılım hatası aracı
-//     arm edemesin. Uçuş için arm KUMANDANIN anahtarından gelir —
-//     paneldeki ARM basılı tutma ister, uçuş boyunca tutulamaz.
-document.getElementById("b_gorev").onclick=async()=>{
-  const d=window._sonDurum||{};
-  const k=d.komut||{};
-  if(!k.arm){
-    alert("⛔ ARAÇ ARM DEĞİL.\n\nÖnce ARM düğmesine bas (mandaldır: "+
-          "bir kez basmak yeter).\nMANUEL kipteysen kumandanın arm "+
-          "anahtarı da kullanılabilir.");
-    return;
-  }
-  if(!confirm("🚀 GÖREVİ BAŞLAT\n\nAraç KENDİ KALKACAK:\n"+
-              "  · dikey tırmanış 3 m/s ile 35 m'ye\n"+
-              "  · sonra hedefe yönelip GPS ile takip\n\n"+
-              "⛔ Pervanelerin takılı ve alanın boş olduğunu doğrula.\n"+
-              "⛔ OTONOMDA KUMANDA YOK SAYILIR: durdurmak için panelde\n"+
-              "   MANUEL, DİKEY İNİŞ ya da PAKET KES kullan.\n\n"+
-              "Başlasın mı?")) return;
-  await post("/api/kip",{kip:"OTONOM"});
-};
+// ⛔ ARM'ı HİÇBİR OTOMATİK YOL YAPMAZ. Arm daima insandan gelir
+//   (bekçi R35); güdümün arm kanalına erişimi YOKTUR ki bir yazılım
+//   hatası yerdeki aracı arm edemesin. Panelin ARM düğmesi bir
+//   MANDALDIR (2026-09-02); MANUEL kipteyken kumandanın arm anahtarı
+//   da mandalı sürer.
 // ⛔⛔ FAILSAFE = DİKEY İNİŞ (kullanıcı kararı 2026-08-31).
 //   Nerede olursak olalım — güdüm sürerken de, pilot elle uçarken de —
 //   bu düğme görevi keser ve uçuş kartının ALT HOLD + POS HOLD kipleriyle
@@ -711,6 +733,12 @@ function kip(k){
     fetch("/api/kip",{method:"POST",body:JSON.stringify({kip:k})}).catch(()=>{});
   document.getElementById("b_manuel").classList.toggle("aktif",k=="MANUEL");
   document.getElementById("b_otonom").classList.toggle("aktif",k=="OTONOM");
+  // ⛔ SERT AYRIM: otonomdayken sanal çubuk alanı GRİLENİR ve tıklanamaz.
+  //   Panelin çubukları otonomda zaten komutu sürmez (güdüm kazanır);
+  //   ama görünür durmaları "acaba ben mi uçuruyorum" karışıklığı
+  //   yaratıyordu.
+  const mk=document.getElementById("manuel_kutu");
+  if(mk) mk.classList.toggle("pasif", k=="OTONOM");
   S.izin=(k=="OTONOM"); }
 // ⭐ YEREL KÖKEN — kalkıştan ÖNCE, araç YERDEYKEN basılır.
 //    Bütün GPS koordinatları buna göre metreye çevrilir; uçuş ortasında
@@ -996,21 +1024,29 @@ function gosterim(d){
        (vd.mb??0)+" MB  (durdurmak için bas)")
     : (vd.kare ? ("⏺ VİDEO KAYDI BAŞLAT   (son: "+(vd.yol||"")+")")
                : "⏺ VİDEO KAYDI BAŞLAT");
-  // ---- GÖREVİ BAŞLAT ----
   window._sonDurum = d;
-  const bGv=document.getElementById("b_gorev");
-  const otonomda = (k.kaynak=="OTONOM");
-  bGv.classList.toggle("aktif", otonomda);
-  bGv.disabled = !k.arm && !otonomda;
-  // ⚠ `g` ve `ko` AŞAĞIDA `const` ile tanımlanıyor — burada kullanmak
-  //   "Cannot access before initialization" atıyordu (yaşandı, panel
-  //   komple çöktü). Doğrudan `d`den okuyoruz.
-  const _g0 = d.gudum||{}, _ko0 = d.konum||{};
-  bGv.textContent = otonomda
-    ? ("🚀 GÖREV SÜRÜYOR — " + (_g0.durum||"?") +
-       (_g0.durum=="KALKIS" ? ("  tırmanıyor " + (_ko0.yukari??0) + " m") : ""))
-    : (k.arm ? "🚀 GÖREVİ BAŞLAT (OTONOM KALKIŞ)"
-             : "🚀 GÖREVİ BAŞLAT — önce ARM et");
+  // ⛔⛔ "GÖREVİ BAŞLAT" DÜĞMESİ KALDIRILDI (kullanıcı kararı 2026-09-02).
+  //   O düğme `post("/api/kip",{kip:"OTONOM"})` yapıyordu — yani OTONOM
+  //   düğmesinin AYNISI. İki düğme aynı işi yapınca operatör hangisinin
+  //   ne yaptığını bilemiyordu; üstelik MANUEL kipteyken de duruyordu.
+  //   Kullanıcı: "manuel mod ile otonom modu birbirinden sertçe ayıralım,
+  //   hiçbir bağları kalmasın."
+  //   Görevi başlatan tek şey artık OTONOM düğmesidir ve uyarısı orada.
+  const _g0 = d.gudum||{};
+  const kb = document.getElementById("kip_bilgi");
+  if(k.kip=="OTONOM"){
+    kb.className="kipbilgi oto";
+    kb.innerHTML = (k.kaynak=="OTONOM")
+      ? ("🚀 GÖREV SÜRÜYOR — <b>"+(_g0.durum||"?")+"</b>"+
+         (_g0.durum=="KALKIS"
+           ? ("  tırmanıyor "+(_g0.yukseklik!=null?_g0.yukseklik.toFixed(0):"?")+
+              " m / hedef "+(d.kalkis_alt??35)+" m") : ""))
+      : ("⛔ OTONOM SEÇİLİ ama güdüm SÜRMÜYOR — sebep: <b>"+
+         (k.sebep&&k.sebep!="-"?k.sebep:"?")+"</b>");
+  } else {
+    kb.className="kipbilgi man";
+    kb.innerHTML = "✋ MANUEL — çubuklar sende. Otonom için <b>OTONOM</b>'a bas.";
+  }
   const di = d.inis||{};
   const inisK = (k.inis_kilidi===true);
   const bInis=document.getElementById("b_inis");
