@@ -2160,10 +2160,18 @@ def test_R70_websocket_CERCEVELEME_ve_EL_SIKISMA():
 
 
 # ---------------------------------------------------------------- R71
-def test_R90_optik_dikisi_varsayilanda_SIM_DEGERLERINI_verir():
-    """⛔ Dikişin birinci şartı: hiçbir DOW_OPTIK_* verilmezse simülasyonda
-    ölçülmüş davranış BİREBİR korunur. Varsayılan kayarsa, sim'de ölçtüğümüz
-    her şey sessizce geçersizleşir."""
+def test_R90_optik_varsayilani_OLCULEN_KALIBRASYON():
+    """⛔⛔ YARIŞMA DEPOSU: hiçbir DOW_OPTIK_* verilmezse ÖLÇÜLEN
+    KALİBRASYON gelmeli — sim değerleri DEĞİL.
+
+    Deneme deposunda tersiydi (varsayılan = sim, gerçek değerler
+    `baslat.sh`ten). Burada bu YANLIŞ: biri `python3 drone_yki.py`
+    çalıştırırsa araç SİM MERCEĞİYLE uçar. F_PX 540.4 vs 366.7 = 1.47 kat;
+    güdüm `yaw + 3·azimut` uyguladığı için kadrajın ortasında onlarca
+    derece fazla yaw komutu demektir. Aynı ders R124'te alınmıştı.
+
+    Kalibrasyon (2026-08-30): FOV 125° köşegen · TILT 25° · BALIKGÖZ ·
+    yakalama kartı 640x480."""
     import importlib
     import subprocess
     kod = (
@@ -2177,11 +2185,23 @@ def test_R90_optik_dikisi_varsayilanda_SIM_DEGERLERINI_verir():
                            capture_output=True, text=True)
     assert cikti.returncode == 0, cikti.stderr
     p = cikti.stdout.split()
-    assert (int(p[0]), int(p[1])) == (1920, 1080), "çözünürlük varsayılanı kaydı"
-    assert float(p[2]) == 540.4, "F_PX varsayılanı kaydı"
-    assert float(p[3]) == 26.50, "TILT varsayılanı kaydı"
-    assert float(p[4]) == 997.0, "MENZIL_C varsayılanı kaydı"
-    assert float(p[5]) == 1053.6, "MENZIL_C_KOSEGEN varsayılanı kaydı"
+    assert (int(p[0]), int(p[1])) == (640, 480), (
+        "çözünürlük varsayılanı %s×%s — yakalama kartı 640x480 veriyor; "
+        "yanlış çözünürlük F_BG ve MENZIL_C'yi ölçekler" % (p[0], p[1]))
+    assert float(p[2]) == 366.7, "F_PX varsayılanı sim değerine kaymış"
+    assert float(p[3]) == 25.0, "TILT varsayılanı sim değerine kaymış"
+    assert float(p[4]) == 676.5, "MENZIL_C varsayılanı sim değerine kaymış"
+    assert float(p[5]) == 714.7, "MENZIL_C_KOSEGEN varsayılanı kaymış"
+    # ⛔ balıkgöz odağı da kalibrasyonla uyuşmalı (640x480 · 125° köşegen)
+    kod2 = ("from dow.gorus import kamera as K\nprint(K.OPTIK_MODEL, K.F_BG)")
+    c2 = subprocess.run([sys.executable, "-c", kod2], cwd=KOK,
+                        capture_output=True, text=True,
+                        env={k: v for k, v in os.environ.items()
+                             if not k.startswith("DOW_OPTIK_")})
+    ad, fbg = c2.stdout.split()
+    assert ad == "esuzaklik", "mercek varsayılanı balıkgöz değil: %s" % ad
+    assert abs(float(fbg) - 366.7) < 2.0, (
+        "F_BG=%s — kalibrasyonla (366.7 px/rad) uyuşmuyor" % fbg)
     assert float(p[6]) == 1.718, "KANAT_M varsayılanı kaydı"
     importlib.import_module("dow.gorus.kamera")
 
@@ -3703,9 +3723,28 @@ def test_R124_VARSAYILANLAR_GERCEK_ARAC_env_verilmese_de_dogru_ucar():
         "model dosyası YOK: %s — dedektör sessizce kapanır, görsel güdüm "
         "hiç çalışmaz" % v)
 
-    # --- optik: balıkgöz ---
-    v = kos("from dow.gorus import kamera as K\nprint(K.OPTIK_MODEL)")
-    assert v == "esuzaklik", "mercek varsayılanı balıkgöz değil: %s" % v
+    # --- optik: balıkgöz VE ölçülen kalibrasyon sabitleri ---
+    v = kos("from dow.gorus import kamera as K\n"
+            "print(K.OPTIK_MODEL, K.IMG_W, K.IMG_H, K.F_PX, K.TILT_DEG)")
+    ad, w, h, fpx, tilt = v.split()
+    assert ad == "esuzaklik", "mercek varsayılanı balıkgöz değil: %s" % ad
+    assert (int(w), int(h)) == (640, 480), (
+        "çözünürlük varsayılanı %sx%s — kart 640x480 veriyor" % (w, h))
+    assert float(fpx) == 366.7 and float(tilt) == 25.0, (
+        "optik sabitleri SİM değerinde kalmış (F_PX=%s TILT=%s) — araç "
+        "yanlış mercek modeliyle uçar" % (fpx, tilt))
+
+    # --- GNSS süzgeci: ayarlı R ve dt ---
+    v = kos("from gercek.gnss_filtre import SuzgecCfg as S\n"
+            "print(S.ACIK, S.R, S.DT)")
+    acik, R, dt = v.split()
+    assert acik == "True", "GNSS süzgeci varsayılanda KAPALI"
+    assert float(R) >= 150.0, (
+        "DOW_GNSS_R=%s cm — gerçek bozulmaya (birkaç metre) göre ÇOK KÜÇÜK; "
+        "ölçüldü: R=50'de 150/200 ölçüm reddediliyor ve filtre çöküyor" % R)
+    assert 0.3 <= float(dt) <= 1.0, (
+        "DOW_GNSS_DT=%s — hedef YANITTA geliyor, yani gönderim "
+        "periyodumuza (~0.55 s) eşit olmalı" % dt)
 
     # --- kalkış fazı KAPALI (pilot elle kaldırır) ---
     # ⭐ OTONOM KALKIŞ (kullanıcı kararı 2026-08-31): araç kendi kalkar.
@@ -3718,10 +3757,6 @@ def test_R124_VARSAYILANLAR_GERCEK_ARAC_env_verilmese_de_dogru_ucar():
         "KALKIS_VZ=%g m/s — dikey döngü HİÇ UÇMADI, ilk denemede bu kadar "
         "hızlı tırmanmak araç yerden fırlar ya da çakılır demektir" % vz)
 
-    # --- GNSS süzgeci AÇIK (hedef GPS'i bozuk geliyor) ---
-    v = kos("from gercek.gnss_filtre import SuzgecCfg as S\nprint(S.ACIK)")
-    assert v == "True", (
-        "GNSS süzgeci varsayılanda KAPALI — bozuk hedef GPS'i ham geçer")
 
     # --- baslat.sh yine de hepsini AÇIKÇA yazmalı (çifte güvence) ---
     sh = open(os.path.join(REEL, "baslat.sh"), encoding="utf-8").read()

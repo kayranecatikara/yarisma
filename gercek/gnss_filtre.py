@@ -254,9 +254,13 @@ class SuzgecCfg:
     TELAFI_SN = _f("DOW_GNSS_TELAFI", 1.0)
     #: Beklenen paket aralığı (s). Sunucu 1.5 Hz ise ~0.67, 5 Hz ise 0.2.
     #  ⚠ Yalnız ilk ölçek içindir; gerçek dt her adımda ÖLÇÜLÜR.
-    DT = _f("DOW_GNSS_DT", 0.2)
+    # ⭐ 0.55 s: sunucuya 1.8 Hz gönderiyoruz ve hedef YANITTA geliyor,
+    #   yani paketler arası süre gönderim periyodumuzdur.
+    DT = _f("DOW_GNSS_DT", 0.55)
     #: Ölçüm gürültüsü (cm). Bozulma büyükse yükselt.
-    R = _f("DOW_GNSS_R", 50.0)
+    # ⭐ 200 cm: ölçüldü — R gerçek bozulmaya eşlenmezse filtre ÇÖKÜYOR
+    #   (bozulma 2 m · R=50 -> 150/200 ölçüm reddedildi).
+    R = _f("DOW_GNSS_R", 200.0)
     #: Kesintide ölü hesabın azami süresi (s). Aşılırsa filtre susar.
     DR_MAKS_SN = _f("DOW_GNSS_DR_MAKS", 2.5)
 

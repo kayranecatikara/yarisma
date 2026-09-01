@@ -85,13 +85,21 @@ def _env_f(ad, varsayilan):
         raise ValueError("%s='%s' sayı değil" % (ad, v))
 
 
-IMG_W = int(_env_f("DOW_OPTIK_W", 1920))
-IMG_H = int(_env_f("DOW_OPTIK_H", 1080))
+# ⭐ YARIŞMA VARSAYILANI 640x480 — yakalama kartının verdiği çözünürlük.
+#   Sim 1920x1080'di. Çözünürlük F_BG ve MENZIL_C'yi ÖLÇEKLER; yanlışsa
+#   menzil ve kerteriz SESSİZCE kayar (yukarıdaki nota bak).
+IMG_W = int(_env_f("DOW_OPTIK_W", 640))
+IMG_H = int(_env_f("DOW_OPTIK_H", 480))
 CX, CY = IMG_W/2.0, IMG_H/2.0
 
-TILT_DEG = _env_f("DOW_OPTIK_TILT", 26.50)   # kamera ekseninin burna göre YUKARI açısı
-F_PX     = _env_f("DOW_OPTIK_F_PX", 540.4)   # fx = fy (kare piksel)
-MENZIL_C = _env_f("DOW_OPTIK_MENZIL_C", 997.0)   # px·m; R = MENZIL_C / kutu_genisligi
+# ⛔⛔ YARIŞMA DEPOSU: VARSAYILANLAR ÖLÇÜLMÜŞ KALİBRASYONDUR, SİM DEĞİL.
+#   Sim değerleri (TILT 26.5 · F_PX 540.4 · MENZIL_C 997 · 1920x1080)
+#   DoW oyun motorunda ölçülmüştü. Gerçek FPV merceği BALIKGÖZ, 640x480:
+#       FOV 125° köşegen · TILT 25° · f_bg = 400/1.0908 = 366.7 px/rad
+#   env verilmese bile doğru mercekle uçulmalı (bkz. R124).
+TILT_DEG = _env_f("DOW_OPTIK_TILT", 25.0)   # kamera ekseninin burna göre YUKARI açısı
+F_PX     = _env_f("DOW_OPTIK_F_PX", 366.7)   # fx = fy (kare piksel)
+MENZIL_C = _env_f("DOW_OPTIK_MENZIL_C", 676.5)   # px·m; R = MENZIL_C / kutu_genisligi
 # ⭐ KÖŞEGEN ÖLÇÜSÜ İÇİN AYRI SABİT (2026-08-28) — bkz. IbvsCfg.MENZIL_OLCU.
 #   TÜRETME (§0.2): sabit, DÜZ UÇUŞTA algılanan menzili DEĞİŞTİRMEYECEK
 #   şekilde seçildi; böylece iki ölçü arasındaki TEK fark YATIŞA
@@ -101,7 +109,7 @@ MENZIL_C = _env_f("DOW_OPTIK_MENZIL_C", 997.0)   # px·m; R = MENZIL_C / kutu_ge
 #   Sonuç — algılanan/gerçek menzil oranı:
 #     yatış  düz    max(w,h) 1.048x   köşegen 1.048x   (BİREBİR aynı)
 #     yatış >32°    max(w,h) 1.180x   köşegen 1.070x   (şişme %18 -> %7)
-MENZIL_C_KOSEGEN = _env_f("DOW_OPTIK_MENZIL_C_KOSEGEN", 1053.6)
+MENZIL_C_KOSEGEN = _env_f("DOW_OPTIK_MENZIL_C_KOSEGEN", 714.7)
 KANAT_M  = _env_f("DOW_OPTIK_KANAT", 1.718)   # Talon kanat açıklığı (belge)
 
 HFOV_DEG = 2*math.degrees(math.atan(CX/F_PX))
@@ -153,7 +161,8 @@ if _FBG_VAR:
 else:
     # yarı_köşegen / (yarı_FOV radyan).  FOV verilmezse pinhole F_PX'ten
     # eşdeğer köşegen FOV'a geçilir — kaba ama tutarlı bir başlangıç.
-    _fov_kos = os.environ.get("DOW_OPTIK_FOV_KOSEGEN")
+    # ⭐ YARIŞMA VARSAYILANI 125° (kalibrasyon). env ezebilir.
+    _fov_kos = os.environ.get("DOW_OPTIK_FOV_KOSEGEN", "125")
     _yari_kos = math.hypot(IMG_W, IMG_H) / 2.0
     if _fov_kos:
         F_BG = _yari_kos / math.radians(float(_fov_kos) / 2.0)
