@@ -137,12 +137,17 @@ export DOW_KMD_EKS_KIP="${DOW_KMD_EKS_KIP:--1}"
 # ikisi de 1700-2100 aralığında. Ölü bant `alt_hold_deadband = 20`.
 export DOW_INIS_CUBUK="${DOW_INIS_CUBUK:--0.35}"
 
-EK=(); SUNUCU=1; SAHTE=0
+EK=(); SUNUCU=1; SAHTE=0; GORSEL=1
 for x in "$@"; do
     case "$x" in
         --deneme) SUNUCU=0 ;;
         --kapat)  ;;
         --sahte)  SAHTE=1; EK+=("$x") ;;
+        # ⛔ GÖRSEL KAPALI KOŞU — yer testleri için (2026-09-02).
+        #   Dedektör kamerasız bir sahnede 0.55-0.66 güvenle YANLIŞ
+        #   POZİTİF üretip güdümü GORSEL fazına kaçırabiliyor (ölçüldü).
+        #   GPS güdümünü sınarken bu istenmez.
+        --gorsel-yok) GORSEL=0 ;;
         *) EK+=("$x") ;;
     esac
 done
@@ -193,5 +198,9 @@ else
 fi
 echo "  PANEL   : http://127.0.0.1:8810"
 echo
+if [ "$GORSEL" = "1" ]; then
+    exec python3 -u drone_yki.py --bag skydagger --kamera "$DOW_KAM_KAYNAK" \
+         --gorsel "${EK[@]}"
+fi
 exec python3 -u drone_yki.py --bag skydagger --kamera "$DOW_KAM_KAYNAK" \
-     --gorsel "${EK[@]}"
+     "${EK[@]}"
