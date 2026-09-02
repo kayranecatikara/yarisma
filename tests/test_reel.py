@@ -4333,3 +4333,94 @@ def test_R129_FAZ_GECISI_OTOMATIK_elle_mudahale_YOK():
     donus = kod[j:j + 200]
     assert 'self.durum = "ISTASYON"' in donus, (
         "KAYIP_KARE eşiği ISTASYON'a döndürmüyor")
+
+
+# ---------------------------------------------------------------- R129
+def test_R129_KILIT_ISTERI_saglanmadan_TERMINAL_FAZINA_gecilmez():
+    """⛔⛔ Şartname 6.1.4 — GÖREVİN PUAN VEREN ŞARTI.
+
+    Kullanıcı (2026-09-02): *"hedef aracı 10 saniyelik bir periyodun en az
+    5 saniyesi kümülatif olarak tespit edersek ve bbox yatay veya dikeyde
+    ekranın en az %5'ini kaplarsa kilit atılmış sayılıyor; BU KİLİT
+    ATILMADAN TERMİNAL VURUŞ FAZINA GEÇİLMİYOR."*
+
+    ⛔ NİYE BEKÇİ: `KILIT_FAZI` uzun süre KAPALI durdu ve o hâlde kilit
+      isteri FİZİKSEL OLARAK SAĞLANAMIYORDU — ölçüldü (76 uçuş):
+      kilit sağlayan koşu 0/76, 10 s penceredeki en iyi kümülatif 1.64 s
+      (isteri 5.0 s). Araç %5 bandından ~1 saniyede geçip çarpıyordu.
+      Yani kapalı hâl, puan almanın önündeki engeldi. Bu bekçi kapının
+      geri kapanmasını ve ölçüt sayılarının kaymasını engeller.
+    """
+    from dow.ayarlar import Ayar
+    from dow.gudum.kilit import KilitDurumu
+
+    # --- 1: FAZ KAPISI AÇIK ve ÖLÇÜT ŞARTNAMEYE UYUYOR ---
+    assert Ayar.KILIT_FAZI is True, (
+        "KİLİT FAZI KAPALI — kilit isteri sağlanamaz, terminal faza "
+        "istersiz geçilir (ölçüldü: 0/76 koşu)")
+    assert Ayar.KILIT_PENCERE_S == 10.0, "şartname penceresi 10 s"
+    assert Ayar.KILIT_GEREKLI_S == 5.0, "şartname kümülatif isteri 5 s"
+    assert Ayar.KILIT_BOYUT_YUZDE == 5.0, "şartname boyut eşiği %5"
+    assert Ayar.KILIT_KIRP_X == 0.25 and Ayar.KILIT_KIRP_Y == 0.10, (
+        "AV dikdörtgeni şartname Şekil 2: soldan/sağdan %25, üstten/alttan %10")
+
+    # --- 2: SÜRE MUHASEBESİ — 5 s dolmadan SAĞLANMAZ, dolunca MANDALLANIR
+    from dow.gorus import kamera as KAM
+    # AV'nin ORTASINDA ve eksenin %20'si kadar büyük bir kutu -> KİLİTLİ
+    buyuk = (KAM.IMG_W / 2.0, KAM.IMG_H / 2.0,
+             0.20 * KAM.IMG_W, 0.20 * KAM.IMG_H, 0.9)
+    kd = KilitDurumu(Ayar)
+    t = 0.0
+    for _ in range(40):                    # 40 x 0.1 s = 4.0 s
+        t += 0.1
+        kd.guncelle(t, buyuk)
+    assert kd.saglandi is False, (
+        "4.0 s kilitle ister SAĞLANDI sayıldı — 5 s gerekiyor "
+        "(kümülatif %.2f s)" % kd.kumulatif_s)
+    for _ in range(15):                    # +1.5 s  -> 5.5 s
+        t += 0.1
+        kd.guncelle(t, buyuk)
+    assert kd.saglandi is True, (
+        "5.5 s kilite rağmen ister sağlanmadı (kümülatif %.2f s)"
+        % kd.kumulatif_s)
+    # MANDALLI: tespit kesilse bile geri dönmez (vuruş manevrası başladı)
+    for _ in range(40):
+        t += 0.1
+        kd.guncelle(t, None)
+    assert kd.saglandi is True, (
+        "ister sağlandıktan sonra geri döndü — vuruş manevrası yarıda "
+        "kalır, çarpışma riski")
+
+    # --- 3: KÜÇÜK KUTU ve AV DIŞI KARE SAYILMAZ ---
+    kucuk = (KAM.IMG_W / 2.0, KAM.IMG_H / 2.0,
+             0.03 * KAM.IMG_W, 0.03 * KAM.IMG_H, 0.9)   # %3 < %5
+    kd2 = KilitDurumu(Ayar)
+    t = 0.0
+    for _ in range(80):
+        t += 0.1
+        kd2.guncelle(t, kucuk)
+    assert kd2.saglandi is False, "eşik altı kutu (%3) kilit sayıldı"
+    kenar = (0.02 * KAM.IMG_W, KAM.IMG_H / 2.0,       # AV'nin SOLUNDA
+             0.20 * KAM.IMG_W, 0.20 * KAM.IMG_H, 0.9)
+    kd3 = KilitDurumu(Ayar)
+    t = 0.0
+    for _ in range(80):
+        t += 0.1
+        kd3.guncelle(t, kenar)
+    assert kd3.saglandi is False, "AV dikdörtgeni DIŞINDAKİ kutu kilit sayıldı"
+
+    # --- 4: FAZ GEÇİŞİ KODDA — istersiz TERMINAL'e geçilemez ---
+    a = open(os.path.join(REEL, "dow", "ana.py"), encoding="utf-8").read()
+    assert 'if self.faz == "KILIT" and self.kilitci.saglandi:' in a, (
+        "KILIT -> TERMINAL geçişi kilit isterine BAĞLI DEĞİL")
+    # köprü/öngörü kutusu muhasebeye GİRMEMELİ (hatalı kilitlenme = eksi puan)
+    #   ⚠ ÇAPA: "KILIT MUHASEBESI" metni dosyada BİRDEN FAZLA geçiyor;
+    #     doğru yeri bulmak için besleme satırının kendisine bakıyoruz.
+    assert "YALNIZ GERCEK TESPITLE" in a, (
+        "kilit muhasebesinin YALNIZ gerçek tespitle beslendiği notu yok")
+    i = a.index("YALNIZ GERCEK TESPITLE")
+    govde = a[i:i + 700]
+    assert "self.kilitci.guncelle(t, kabul)" in govde, (
+        "kilit muhasebesi KABUL EDİLEN kutuyla beslenmiyor — köprü/öngörü "
+        "kutusu girerse şartnamenin HATALI KİLİTLENME tanımına gireriz "
+        "(eksi puan)")

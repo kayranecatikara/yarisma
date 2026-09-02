@@ -92,6 +92,21 @@ export DOW_KALKIS_VZ="${DOW_KALKIS_VZ:-3.0}"
 
 # ---- VİDEO KAYDI ----------------------------------------------------------
 # ⛔ Kilitlenmeler kaydedilen videoyla inceleniyor (doküman §8).
+# ==============================================================================
+# KİLİT FAZI  (şartname 6.1.4 — kilitlenme puanı)
+# ==============================================================================
+# ⭐ Görev KİLİTLENME: 10 s'lik kayan pencerede KÜMÜLATİF ≥5 s boyunca
+#   hedefin merkezi AV dikdörtgeninde ve kutusu eksenin ≥%5'i olacak.
+#   ⛔ BU İSTER SAĞLANMADAN TERMİNAL VURUŞ FAZINA GEÇİLMEZ.
+# ⛔ KAPALIYKEN İSTER SAĞLANAMIYOR — ölçüldü (76 uçuş): kilit sağlayan
+#   koşu 0/76, en iyi kümülatif 1.64 s. Araç %5 bandından ~1 s'de geçip
+#   çarpıyor. Yani kapalı hâl puan almayı imkânsız kılıyor.
+export DOW_KILIT_FAZI="${DOW_KILIT_FAZI:-1}"
+export DOW_KILIT_BOYUT="${DOW_KILIT_BOYUT:-5.0}"    # eksenin en az %'si
+export DOW_KILIT_PENCERE="${DOW_KILIT_PENCERE:-10.0}"
+export DOW_KILIT_GEREKLI="${DOW_KILIT_GEREKLI:-5.0}"
+export DOW_KILIT_MENZIL="${DOW_KILIT_MENZIL:-7.0}"  # KİLİT fazında tutulan mesafe
+
 export DOW_VIDEO_FPS="${DOW_VIDEO_FPS:-12}"
 
 # ==============================================================================

@@ -1095,10 +1095,20 @@ function gosterim(d){
       "Sıra: gaz çubuğunu DİBE çek → <b>ARM</b> → <b>GÖREVİ BAŞLAT</b>.";
   } else if(k.kaynak=="OTONOM"){
     kb.className="kipbilgi oto";
+    // ⛔ GÖRSEL FAZDA ALT FAZ KRİTİK: "KILIT" = şartname isterini
+    //   biriktiriyoruz (mesafe tutuluyor), "TERMINAL" = ister sağlandı,
+    //   vuruşa gidiliyor. Operatör hangisinde olduğunu GÖRMELİ.
+    const _kl0 = d.kilit||{};
     kb.innerHTML="🚀 <b>GÖREV SÜRÜYOR</b> — "+(_g0.durum||"?")+
       (_g0.durum=="KALKIS"
         ? ("  tırmanıyor "+(_g0.yukseklik!=null?_g0.yukseklik.toFixed(0):"?")+
-           " m / hedef "+(d.kalkis_alt??35)+" m") : "");
+           " m / hedef "+(d.kalkis_alt??35)+" m")
+        : (_g0.durum=="GORSEL"
+            ? ("  <b>"+(_g0.faz||"?")+"</b>"+
+               (_g0.faz=="KILIT"
+                 ? ("  kilit "+(_kl0.kilit_s??0)+" / 5.0 s — mesafe tutuluyor")
+                 : "  ister SAĞLANDI, vuruşa gidiliyor"))
+            : ""));
   } else {
     kb.className="kipbilgi kotu";
     kb.innerHTML="⛔ <b>GÖREV BAŞLATILDI ama güdüm SÜRMÜYOR</b> — sebep: <b>"+

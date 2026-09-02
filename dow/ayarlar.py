@@ -203,9 +203,26 @@ class Ayar:
     #   açıkken araç önce bir MESAFE TUTAR (aşağıdaki KILIT_MENZIL_M),
     #   kilit birikince tavanı kaldırıp terminale geçer.
     #
-    # ⛔ VARSAYILAN KAPALI (kill-switch). Kapalıyken güdüm BİT BİT bugünkü
-    #   davranıştır — bekçi B63 ve araclar/denklik.py bunu sınar.
-    KILIT_FAZI        = _b("DOW_KILIT_FAZI", False)
+    # ⭐⭐ VARSAYILAN AÇILDI (kullanıcı kararı 2026-09-02).
+    #   Kullanıcı görevi netleştirdi: "hedef aracı 10 saniyelik bir
+    #   periyodun en az 5 saniyesi kümülatif olarak tespit edersek ve
+    #   bbox yatay veya dikeyde ekranın en az %5'ini kaplarsa kilit
+    #   atılmış sayılıyor; BU KİLİT ATILMADAN TERMİNAL VURUŞ FAZINA
+    #   GEÇİLMİYOR."
+    #
+    #   ⛔ KAPALIYKEN KİLİT FİZİKSEL OLARAK SAĞLANAMIYOR — yukarıdaki
+    #     ölçüm bunu söylüyor: kilit isterini sağlayan koşu 0/76, en iyi
+    #     kümülatif 1.64 s (isteri 5.0 s). Araç %5 bandından ~1 saniyede
+    #     geçip çarpıyor. Yani kapalı hâl, PUAN ALMANIN önündeki engel.
+    #
+    #   AÇIKKEN: görsel temas kurulunca faz "KILIT" olur, araç
+    #   KILIT_MENZIL_M mesafesini TUTAR ve kümülatif süreyi biriktirir;
+    #   ister sağlanınca (mandallı) faz "TERMINAL"e geçer ve vuruşa gider.
+    #
+    #   Kill-switch DURUYOR: `DOW_KILIT_FAZI=0` ile eski davranışa dönülür
+    #   (kapalıyken güdüm bit bit eski hâlidir — `kilitci.guncelle` bile
+    #   çağrılmaz).
+    KILIT_FAZI        = _b("DOW_KILIT_FAZI", True)
     # AV (Hedef Vuruş Alanı) kırpma oranları — şartname Şekil 2
     KILIT_KIRP_X      = _f("DOW_KILIT_KIRP_X", 0.25)   # soldan/sağdan
     KILIT_KIRP_Y      = _f("DOW_KILIT_KIRP_Y", 0.10)   # üstten/alttan

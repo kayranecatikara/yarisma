@@ -176,6 +176,18 @@ yanlış olur; `DOW_KAM_W/H`'yi düzelt.
 **Görsel devir:** dedektör **10 ardışık karede** hedefi görürse
 `ISTASYON → GORSEL` atlar. 20 ardışık tespitsiz karede GPS'e döner.
 
+**Görsel fazın İKİ alt fazı var** (şartname 6.1.4):
+
+| alt faz | ne yapar |
+|---|---|
+| **KILIT** | ~7 m mesafeyi **TUTAR** ve kilit süresini biriktirir. Kip şeridi `kilit 2.3 / 5.0 s` yazar; FPV üstünde de `KİLİT x.x/5.0 s` görünür |
+| **TERMINAL** | ister sağlandı (10 s'lik pencerede kümülatif ≥5 s, kutu eksenin ≥%5'i) → **vuruşa gider**. Mandallı: geri dönmez |
+
+⛔ **Kilit isteri sağlanmadan terminal faza GEÇİLMEZ.** `DOW_KILIT_FAZI=1`
+(varsayılan). Kapatmak için `DOW_KILIT_FAZI=0` — ama kapalıyken kilit
+isteri fiziksel olarak sağlanamıyor (ölçüldü: 76 uçuşta 0 kilit, en iyi
+kümülatif 1.64 s).
+
 ### Harita
 
 Büyük yazı **DÖNÜŞ YÖNÜ**: hedefi sağa koy → yaw komutu `+`, sola koy
