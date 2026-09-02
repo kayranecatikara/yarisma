@@ -105,7 +105,10 @@ export DOW_KILIT_FAZI="${DOW_KILIT_FAZI:-1}"
 export DOW_KILIT_BOYUT="${DOW_KILIT_BOYUT:-5.0}"    # eksenin en az %'si
 export DOW_KILIT_PENCERE="${DOW_KILIT_PENCERE:-10.0}"
 export DOW_KILIT_GEREKLI="${DOW_KILIT_GEREKLI:-5.0}"
-export DOW_KILIT_MENZIL="${DOW_KILIT_MENZIL:-7.0}"  # KİLİT fazında tutulan mesafe
+# KİLİT fazının denge noktası: kutunun oturması istenen EKRAN YÜZDESİ.
+# Şartname eşiği %5; %8 hem sayacı doyurur (kutu titrerken bantta kalır)
+# hem de temas payı bırakır. ⛔ METRE DEĞİL — ölçüt piksel.
+export DOW_KILIT_DENGE="${DOW_KILIT_DENGE:-8.0}"
 
 export DOW_VIDEO_FPS="${DOW_VIDEO_FPS:-12}"
 

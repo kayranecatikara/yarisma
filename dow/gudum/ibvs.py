@@ -472,8 +472,9 @@ def komut(cx, cy, w, h, own_yaw_deg, own_pitch_deg, own_roll_deg,
                       girerse, yarın oraya GPS'ten gelen bir menzil
                       bağlanabilir ve kimse fark etmez. Bekçi B1/B19
                       imzayı ad düzeyinde denetler; ayar metre cinsinden
-                      okunur ama piksele çağrı YERİNDE, tek seferde
-                      çevrilir (Ayar.KILIT_MENZIL_M -> MENZIL_C/M).
+                      DOĞRUDAN PİKSEL olarak verilir (Ayar.KILIT_DENGE_YUZDE
+                      × kadraj genişliği) — metre üzerinden çevrim
+                      KALDIRILDI, şartname ölçütü zaten piksel.
 
     ÇIKTI: (v_ned, vz, yaw_hedef_deg, hiz_I_yeni, tani)
       v_ned = (vx, vy) m/s DÜNYA yatay düzleminde (NED: x kuzey, y doğu)

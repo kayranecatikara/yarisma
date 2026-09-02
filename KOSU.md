@@ -180,8 +180,15 @@ yanlış olur; `DOW_KAM_W/H`'yi düzelt.
 
 | alt faz | ne yapar |
 |---|---|
-| **KILIT** | ~7 m mesafeyi **TUTAR** ve kilit süresini biriktirir. Kip şeridi `kilit 2.3 / 5.0 s` yazar; FPV üstünde de `KİLİT x.x/5.0 s` görünür |
+| **KILIT** | kutuyu **ekranın %8'inde TUTAR** ve kilit süresini biriktirir. Kip şeridi `kilit 2.3 / 5.0 s` yazar; FPV üstünde de `KİLİT x.x/5.0 s` görünür |
 | **TERMINAL** | ister sağlandı (10 s'lik pencerede kümülatif ≥5 s, kutu eksenin ≥%5'i) → **vuruşa gider**. Mandallı: geri dönmez |
+
+⛔ **Kilit menzili METRE DEĞİL, EKRAN YÜZDESİDİR.** Şartname ölçütü
+piksel: kutu, yatay **veya** dikey eksenin ≥%5'i. Kadraj 640x480 ise
+eşikler 32 px (yatay) / 24 px (dikey). Denge noktası `DOW_KILIT_DENGE=8`
+→ **51 px**, yani eşiğin %60 üstünde. Pay şart: kutu kareden kareye
+titrer, tam %5'te dengelenirsek sayaç sürekli girip çıkar ve kümülatif
+5 s hiç dolmaz.
 
 ⛔ **Kilit isteri sağlanmadan terminal faza GEÇİLMEZ.** `DOW_KILIT_FAZI=1`
 (varsayılan). Kapatmak için `DOW_KILIT_FAZI=0` — ama kapalıyken kilit

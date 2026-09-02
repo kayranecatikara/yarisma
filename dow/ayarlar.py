@@ -200,7 +200,7 @@ class Ayar:
     #     kilit ancak R <= ~9 m'de mümkün, orada kapanma ~10 m/s
     #     -> %5 bandından 1 saniyede geçip çarpıyoruz.
     #   Yani kilit, MEVCUT yasayla fiziksel olarak sağlanamaz. Kilit fazı
-    #   açıkken araç önce bir MESAFE TUTAR (aşağıdaki KILIT_MENZIL_M),
+    #   açıkken araç önce bir KUTU BOYUTU TUTAR (KILIT_DENGE_YUZDE),
     #   kilit birikince tavanı kaldırıp terminale geçer.
     #
     # ⭐⭐ VARSAYILAN AÇILDI (kullanıcı kararı 2026-09-02).
@@ -216,7 +216,7 @@ class Ayar:
     #     geçip çarpıyor. Yani kapalı hâl, PUAN ALMANIN önündeki engel.
     #
     #   AÇIKKEN: görsel temas kurulunca faz "KILIT" olur, araç
-    #   KILIT_MENZIL_M mesafesini TUTAR ve kümülatif süreyi biriktirir;
+    #   kutuyu KILIT_DENGE_YUZDE'de TUTAR ve kümülatif süreyi biriktirir;
     #   ister sağlanınca (mandallı) faz "TERMINAL"e geçer ve vuruşa gider.
     #
     #   Kill-switch DURUYOR: `DOW_KILIT_FAZI=0` ile eski davranışa dönülür
@@ -240,17 +240,35 @@ class Ayar:
     # Bir çıkarımın alabileceği EN BÜYÜK kredi. Şartnamenin kendi toleransı
     # ("5 saniyelik kilitlenme için 200 ms'ye kadar tolerans") = 0.20 s.
     KILIT_DT_MAX_S    = _f("DOW_KILIT_DT_MAX", 0.20)
-    # ⭐ KİLİT FAZINDA TUTULACAK MESAFE (m) — PI'nın denge noktası.
-    #   TÜRETME (§0.2): güdüm hızı v = K_FWD*(hedef_boyut - boyut) + I,
-    #   I tavanı 8 m/s, K_FWD 0.35. Hedef 18 m/s uçuyor; onunla aynı hızda
-    #   gitmek için v=18 gerekir -> kalıcı hata = (18-8)/0.35 = 28.6 px.
-    #   hedef_boyut = 997/6.0 = 166 px  ->  denge kutusu ≈ 137 px.
-    #   ÖLÇÜLEN kutu-menzil sabiti (76 uçuş): w·R ≈ 869 px·m
-    #   ->  denge GERÇEK menzili ≈ 869/137 ≈ 6.3 m, kutu ekranın %7.1'i.
-    #   Gereken %6 (115 px) -> ~1.2 m'lik pay var.
-    #   ⚠ RİSK: 6.3 m, temas yarıçapının (2.0 m) 3 katı. Hedef kaçamak
-    #     yaparsa gecikmeyle (~236 ms) erken temas olabilir — ölçülecek.
-    KILIT_MENZIL_M    = _f("DOW_KILIT_MENZIL", 7.0)
+    # ⭐⭐ KİLİT FAZININ DENGE NOKTASI — EKRAN YÜZDESİ (metre DEĞİL).
+    #
+    #   ⛔ ESKİDEN METRE İDİ (`KILIT_MENZIL_M = 7.0`) ve KALDIRILDI
+    #     (kullanıcı kararı 2026-09-02): "kilit menzil m ne demek ki,
+    #     böyle bir şeyin olmaması lazım; hedefin bbox'u ekranda dikey
+    #     veya yatayda yüzde 5'i kapsaması kilit menziline girdiği
+    #     anlamına gelir."
+    #     HAKLI VE ÖNEMLİ: şartname ölçütü PİKSELDİR. Metre üzerinden
+    #     ifade etmek, TÜRETİLMİŞ ve BELİRSİZ bir sabiti (`MENZIL_C`,
+    #     kutu-menzil çarpanı) kilit döngüsünün içine sokuyordu —
+    #     `MENZIL_C` yanlışsa hem tutulan mesafe hem kutu boyutu birden
+    #     kayardı ve kimse fark etmezdi. Artık denge noktası doğrudan
+    #     ölçütün kendi biriminde.
+    #
+    #   TÜRETME (§0.2): şartname "yatay VEYA dikey eksenin en az %5'i"
+    #     diyor (`KILIT_BOYUT_YUZDE`). Kadraj 640x480 ise eşikler:
+    #         yatay  %5 · 640 = 32 px      dikey  %5 · 480 = 24 px
+    #     Regülatör `olcu()` = max(w, h) büyüklüğünü tutar. Denge noktasını
+    #     GENİŞ eksenin yüzdesi olarak kurarsak (%·IMG_W) iki eşiği de
+    #     birden garantileriz — hangi eksen büyükse o kazanır.
+    #         %8 · 640 = 51.2 px   ->  32 px eşiğinin %60 üstünde
+    #     Ölçülen kutu-menzil sabitiyle (MENZIL_C ≈ 676 px·m) bu yaklaşık
+    #     676/51.2 ≈ 13 m'ye denk gelir — ama bu SONUÇTUR, girdi değil.
+    #
+    #   ⚠ PAY NİYE GEREKLİ: kutu boyutu kareden kareye titrer. Tam %5'te
+    #     dengelenirsek kilit sayacı sürekli girip çıkar ve kümülatif 5 s
+    #     hiç dolmaz. %8 hem sayacı doyurur hem eski 7 m'ye göre araca
+    #     daha fazla temas payı bırakır.
+    KILIT_DENGE_YUZDE = _f("DOW_KILIT_DENGE", 8.0)
 
     # ============ ⭐ KİLİT FAZI HIZ REGÜLATÖRÜ (2026-08-28) ============
     # KULLANICI GÖZLEMİ (uçuşu kendi gözüyle izledi): "kilit isterini

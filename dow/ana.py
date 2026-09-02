@@ -673,13 +673,16 @@ class Beyin:
                     self.faz = "TERMINAL"
                     self.hiz_I = 0.0     # yeni denge noktasi: integrali sifirla
                 if self.faz == "KILIT":
-                    # AYARDAN PIKSELE cevrim BURADA, tek seferde. Iki sabitin
-                    # bolumu; canli hicbir olcum girmiyor (S10 temiz).
-                    # ⚠ Denge kutusu, O ANKİ MENZİL ÖLÇÜSÜNÜN sabitiyle
-                    #   kurulmalı; yoksa köşegene geçince denge noktası
-                    #   sessizce kayar (aynı metre, farklı piksel).
-                    _dpx = (ibvs.olcu(1.0, 0.0)[1]
-                            / max(0.1, self.cfg.KILIT_MENZIL_M))
+                    # ⭐ DENGE NOKTASI DOĞRUDAN EKRAN YÜZDESİNDEN.
+                    #   ⛔ ESKİDEN metre üzerinden çevriliyordu
+                    #     (`MENZIL_C / KILIT_MENZIL_M`) — yani türetilmiş
+                    #     bir sabit kilit döngüsüne giriyordu. Şartname
+                    #     ölçütü PİKSEL olduğu için artık doğrudan piksel.
+                    #   Geniş eksenin yüzdesi alınır: regülatör max(w,h)
+                    #   tuttuğu için bu, %5'lik yatay VE dikey eşiklerin
+                    #   İKİSİNİ de birden garantiler.
+                    from dow.gorus import kamera as _KAMK
+                    _dpx = (self.cfg.KILIT_DENGE_YUZDE / 100.0) * _KAMK.IMG_W
                     _reg = self.kilit_reg
             (vx, vy), vz_ned, yaw_hedef, self.hiz_I, ti = ibvs.komut(
                 cx, cy, w, h, own_yaw, own_pitch, own_roll, self.hiz_I, dt,

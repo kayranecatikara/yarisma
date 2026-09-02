@@ -4364,6 +4364,29 @@ def test_R129_KILIT_ISTERI_saglanmadan_TERMINAL_FAZINA_gecilmez():
     assert Ayar.KILIT_KIRP_X == 0.25 and Ayar.KILIT_KIRP_Y == 0.10, (
         "AV dikdörtgeni şartname Şekil 2: soldan/sağdan %25, üstten/alttan %10")
 
+    # --- 1b: DENGE NOKTASI PİKSEL/EKRAN YÜZDESİ — METRE DEĞİL ---
+    #   Kullanıcı (2026-09-02): "kilit menzil m ne demek ki, böyle bir
+    #   şeyin olmaması lazım; hedefin bbox'u ekranda dikey veya yatayda
+    #   yüzde 5'i kapsaması kilit menziline girdiği anlamına gelir."
+    #   ⛔ Metre üzerinden ifade etmek, TÜRETİLMİŞ bir sabiti (MENZIL_C)
+    #     kilit döngüsüne sokuyordu: yanlışsa hem tutulan mesafe hem kutu
+    #     boyutu birden kayardı ve kimse fark etmezdi.
+    assert not hasattr(Ayar, "KILIT_MENZIL_M"), (
+        "metre cinsinden kilit menzili GERİ GELMİŞ — ölçüt piksel "
+        "(CLAUDE.md §5.12: elenen özellik TAMAMEN çıkar)")
+    assert hasattr(Ayar, "KILIT_DENGE_YUZDE"), "denge noktası ayarı yok"
+    assert Ayar.KILIT_DENGE_YUZDE > Ayar.KILIT_BOYUT_YUZDE, (
+        "denge noktası (%.1f%%) şartname eşiğinin (%.1f%%) ÜSTÜNDE olmalı — "
+        "tam eşikte dengelenirsek kutu titrerken kilit sayacı sürekli "
+        "girip çıkar ve kümülatif 5 s hiç dolmaz"
+        % (Ayar.KILIT_DENGE_YUZDE, Ayar.KILIT_BOYUT_YUZDE))
+    # denge, GENİŞ eksenin yüzdesi olarak kurulmalı: regülatör max(w,h)
+    # tuttuğu için bu, %5'lik yatay VE dikey eşiklerin ikisini de garantiler
+    a0 = open(os.path.join(REEL, "dow", "ana.py"), encoding="utf-8").read()
+    assert "KILIT_DENGE_YUZDE / 100.0) * _KAMK.IMG_W" in a0, (
+        "denge noktası ekran genişliğinden hesaplanmıyor — menzil sabiti "
+        "üzerinden çevrim geri gelmiş olabilir")
+
     # --- 2: SÜRE MUHASEBESİ — 5 s dolmadan SAĞLANMAZ, dolunca MANDALLANIR
     from dow.gorus import kamera as KAM
     # AV'nin ORTASINDA ve eksenin %20'si kadar büyük bir kutu -> KİLİTLİ
