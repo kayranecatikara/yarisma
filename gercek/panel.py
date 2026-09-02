@@ -804,14 +804,14 @@ document.getElementById("b_gorev").onclick=async()=>{
   if(k0.gorev===true){ await post("/api/gorev",{ac:false}); return; }
   if(k0.kip!=="OTONOM"){ alert("⛔ Önce OTONOM kipine geç."); return; }
   if(k0.arm!==true){ alert("⛔ ARAÇ ARM DEĞİL.\n\nÖnce ARM et."); return; }
-  if(!confirm("🚀 GÖREV BAŞLIYOR — ARAÇ KENDİ KALKACAK\n\n"+
-              "  · dikey tırmanış "+(d0.kalkis_vz??3)+" m/s ile "+
-              (d0.kalkis_alt??35)+" m'ye\n"+
-              "  · sonra hedefe yönelip GPS ile takip\n\n"+
-              "⛔ Pervanelerin durumunu ve alanı doğrula.\n"+
-              "⛔ OTONOMDA KUMANDA GÜDÜME KARIŞMAZ: durdurmak için\n"+
-              "   panelde GÖREVİ DURDUR, MANUEL, DİKEY İNİŞ ya da PAKET KES.\n\n"+
-              "Başlasın mı?")) return;
+  // ⛔ ONAY KUTUSU KALDIRILDI (kullanıcı kararı 2026-09-02): "görevi
+  //   başlata bastığım anda görev başlasın".
+  //   ⚠ KAZA KORUMASI KAYBOLMADI, ÜÇ KAPI DURUYOR ve hepsi bu düğmeden
+  //     ÖNCE geçilmek zorunda:
+  //       1. kip OTONOM olacak          (ayrı düğme)
+  //       2. araç ARM olacak            (ayrı düğme + gaz kanalı kapısı)
+  //       3. bu düğme yalnız otonom kipte GÖRÜNÜR ve ARM'ken tıklanır
+  //     Yani görev, üç ayrı bilinçli eylemin sonunda başlıyor.
   await post("/api/gorev",{ac:true});
 };
 
