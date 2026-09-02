@@ -1,14 +1,16 @@
 # YARIŞMA GÜNÜ — çalıştırma komutları
 
 Hedef verisi **gerçek yarışma sunucusundan** gelir. Sahte sunucu ve harita
-YOK. Her komuttan önce: `cd ~/projects/yarisma`
+YOK.
+
+> ⭐ Aşağıdaki komutların hepsi **tam yollu** — hangi dizinde olursan ol
+> kopyala-yapıştır çalışır. `cd` yapmana gerek yok.
 
 ---
 
 ## 0 · TEMİZLİK
 
 ```bash
-cd ~/projects/yarisma
 for p in $(pgrep -f drone_yki; pgrep -f sahte_sky; pgrep -f sahte_sun); do kill -9 $p; done
 ss -ltn | grep -E ":8766|:8810" || echo "portlar bos"
 ```
@@ -20,7 +22,7 @@ ss -ltn | grep -E ":8766|:8810" || echo "portlar bos"
 ## 1 · AĞ — ethernet kablosunu tak, sonra:
 
 ```bash
-sudo ./araclar/ag_kur.sh
+sudo ~/projects/yarisma/araclar/ag_kur.sh
 ```
 
 Beklenen son satır: **`AĞ HAZIR.`**
@@ -28,7 +30,7 @@ Kurduğu: `enp4s0` → `10.0.0.114/24`, sunucu `10.0.0.10:10001`.
 
 Hakemler farklı adres verirse:
 ```bash
-sudo AG_ADRES=10.0.0.X/24 AG_SUNUCU=10.0.0.Y ./araclar/ag_kur.sh
+sudo AG_ADRES=10.0.0.X/24 AG_SUNUCU=10.0.0.Y ~/projects/yarisma/araclar/ag_kur.sh
 ```
 
 ---
@@ -36,7 +38,7 @@ sudo AG_ADRES=10.0.0.X/24 AG_SUNUCU=10.0.0.Y ./araclar/ag_kur.sh
 ## 2 · SUNUCU DOĞRULAMA (araç gerekmez)
 
 ```bash
-python3 araclar/sunucu_testi.py --sure 20
+python3 ~/projects/yarisma/araclar/sunucu_testi.py --sure 20
 ```
 
 Görmen gerekenler: giriş **başarılı** · telemetri **kabul** · hedef verisi
@@ -49,7 +51,7 @@ Görmen gerekenler: giriş **başarılı** · telemetri **kabul** · hedef veris
 ## 3 · BACKEND (Terminal 1)
 
 ```bash
-./skydagger/baslat_backend.sh
+~/projects/yarisma/skydagger/baslat_backend.sh
 ```
 
 Konsolunda **sırayla**:
@@ -67,14 +69,13 @@ EXTERNAL
 ## 4 · YER KONTROL İSTASYONU (Terminal 2)
 
 ```bash
-cd ~/projects/yarisma
-./baslat.sh
+~/projects/yarisma/baslat.sh
 ```
 
 ⚠ Kamera `/dev/video2` varsayılan. Farklıysa:
 ```bash
-python3 gercek/kamera_ayari.py --tara      # cihazı bul
-DOW_KAM_KAYNAK=/dev/videoX ./baslat.sh
+python3 ~/projects/yarisma/gercek/kamera_ayari.py --tara   # cihazı bul
+DOW_KAM_KAYNAK=/dev/videoX ~/projects/yarisma/baslat.sh
 ```
 
 Açılışta görmen gerekenler:
@@ -150,7 +151,7 @@ EXTERNAL STOP
 
 Ağı geri almak (isteğe bağlı):
 ```bash
-sudo ./araclar/ag_kur.sh --kaldir
+sudo ~/projects/yarisma/araclar/ag_kur.sh --kaldir
 ```
 
 ---
@@ -166,9 +167,9 @@ sudo ./araclar/ag_kur.sh --kaldir
 | `DOW_SUNUCU_HZ_TAVAN` | 3.5 denenmişti | **verme** — 2.0 (⛔ aşarsan sunucu 400 döner) |
 | `DOW_KMT_VETO=0` | tezgâhta veriliyordu | **verme** |
 | ethernet | gerekmiyordu | **ŞART** — adım 1 |
-| GCS komutu | env'li uzun satır | **sadece `./baslat.sh`** |
+| GCS komutu | env'li uzun satır | **sadece `~/projects/yarisma/baslat.sh`** |
 
-⭐ **Kural: `./baslat.sh`'a hiçbir `DOW_SUNUCU*` değişkeni verme.** Yarışma
+⭐ **Kural: `baslat.sh`'a hiçbir `DOW_SUNUCU*` değişkeni verme.** Yarışma
 değerleri betiğin içinde. Tek istisna kamera cihazı (`DOW_KAM_KAYNAK`).
 
 ---
@@ -206,10 +207,12 @@ print('kalan',(d.get('kontrol') or {}).get('kalan'))"
 ## HIZLI ÖZET
 
 ```bash
-cd ~/projects/yarisma
-sudo ./araclar/ag_kur.sh                    # 1  ağ
-python3 araclar/sunucu_testi.py --sure 20   # 2  sunucu
-./skydagger/baslat_backend.sh               # 3  backend  (/connect, RC_ENABLE, pil, STOP, EXTERNAL)
-./baslat.sh                                 # 4  GCS      (yeni terminal)
+sudo ~/projects/yarisma/araclar/ag_kur.sh                      # 1  ağ
+python3 ~/projects/yarisma/araclar/sunucu_testi.py --sure 20   # 2  sunucu
+~/projects/yarisma/skydagger/baslat_backend.sh                 # 3  backend
+~/projects/yarisma/baslat.sh                                   # 4  GCS (yeni terminal)
 ```
+
+3. adımın konsolunda: `/connect` → `RC_ENABLE` → 2S pili tak (MAVİ) → `STOP` → `EXTERNAL`
+
 → `http://127.0.0.1:8810` → **KÖKEN KUR · OTONOM · gaz dibe · ARM · GÖREVİ BAŞLAT**

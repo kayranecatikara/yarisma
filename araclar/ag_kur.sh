@@ -12,9 +12,11 @@
 #   Sunucu aynı /24'te olduğu için ağ geçidine gerek de yok.
 #
 # Kullanım:
-#     sudo ./araclar/ag_kur.sh            # kur ve doğrula
-#     sudo ./araclar/ag_kur.sh --kaldir   # yarışma sonrası temizle
+#     sudo ~/projects/yarisma/araclar/ag_kur.sh            # kur ve doğrula
+#     sudo ~/projects/yarisma/araclar/ag_kur.sh --kaldir   # temizle
 set -u
+# her dizinden çalışsın (bkz. baslat.sh'taki aynı not)
+cd "$(dirname "$(readlink -f "$0")")/.." || true
 ARAYUZ="${AG_ARAYUZ:-enp4s0}"
 ADRES="${AG_ADRES:-10.0.0.114/24}"
 SUNUCU_IP="${AG_SUNUCU:-10.0.0.10}"
@@ -32,7 +34,10 @@ if [ "${1:-}" = "--kaldir" ]; then
     exit 0
 fi
 
-[ "$(id -u)" = "0" ] || { kirmizi "  sudo ile çalıştır:  sudo ./araclar/ag_kur.sh"; exit 1; }
+# ⛔ TAM YOL BAS: kullanıcı ev dizinindeyken "./araclar/..." yazınca
+#   "command not found" alıyor (sahada yaşandı). Kopyalanabilir olsun.
+KENDIM="$(readlink -f "$0")"
+[ "$(id -u)" = "0" ] || { kirmizi "  sudo ile çalıştır:"; echo "     sudo $KENDIM"; exit 1; }
 
 echo "=============================================================="
 echo "  YARIŞMA AĞI KURULUMU"
@@ -95,4 +100,4 @@ fi
 
 echo
 yesil "  AĞ HAZIR."
-echo "  Sıradaki:  python3 araclar/sunucu_testi.py --sure 20"
+echo "  Sıradaki:  python3 $(dirname "$KENDIM")/sunucu_testi.py --sure 20"

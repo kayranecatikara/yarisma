@@ -12,6 +12,13 @@
 #      ./skydagger/baslat_backend.sh
 #      /connect <ESP32 portu> · RC_ENABLE · (2S pil tak, MAVİ) · STOP · EXTERNAL
 set -u
+# ⛔⛔ HER DİZİNDEN ÇALIŞSIN (2026-09-02, sahada yaşandı: `sudo
+#   ./araclar/ag_kur.sh` ev dizininden çağrılınca "command not found").
+#   Bu betik `drone_yki.py`yi GÖRECELİ çağırıyor ve uçuş kaydını
+#   `logs/` altına GÖRECELİ yazıyor. Başka bir dizinden çalıştırılırsa
+#   ikisi de kırılırdı. Yarışma gününde dizin hatası kabul edilemez.
+#   `readlink -f`: sembolik bağ üzerinden çağrılsa da gerçek yeri bulur.
+cd "$(dirname "$(readlink -f "$0")")" || { echo "depo dizinine girilemedi"; exit 1; }
 cd "$(dirname "$0")"
 export PYTHONPATH="$(pwd):${PYTHONPATH:-}"
 
