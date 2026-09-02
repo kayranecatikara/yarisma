@@ -157,6 +157,23 @@ def _durum():
             import math
             d["konum"] = {"kuzey": round(x, 1), "dogu": round(y, 1),
                           "yukari": round(z, 1)}
+            # ⛔ İRTİFA TEŞHİSİ (2026-09-02): panelde "-893 m" görüldü ama
+            #   uçuş kartının kendi OSD'si 1 m diyordu. `yukari` =
+            #   irtifa_amsl − köken.irtifa0; hangisinin kaydığını ancak
+            #   İKİSİNİ DE görerek anlarız. Tahmin etmek yerine ölçüyoruz.
+            try:
+                _g = gb._al("gps") or {}
+                _v = gb._al("vario") or {}
+                d["irtifa_tani"] = {
+                    "baro": _v.get("irtifa_m"),
+                    "amsl": _g.get("irtifa_amsl_m"),
+                    "koken0": getattr(gb.cerceve, "irtifa0", None),
+                    "fark": (None if _g.get("irtifa_amsl_m") is None
+                             or getattr(gb.cerceve, "irtifa0", None) is None
+                             else round(float(_g["irtifa_amsl_m"])
+                                        - float(gb.cerceve.irtifa0), 1))}
+            except Exception:
+                pass
             d["durus"] = {"roll": round(math.degrees(r), 1),
                           "pitch": round(math.degrees(p), 1),
                           "yaw": round(math.degrees(yw), 1)}
@@ -1182,7 +1199,13 @@ function gosterim(d){
         ((g.tik && g.tik!=g.durum)
           ? ('  <b class=kotu2>⛔ '+g.tik+'</b>') : ""))+
     sat("kuzey / doğu",(ko.kuzey??"—")+" / "+(ko.dogu??"—")+" m")+
-    sat("yükseklik",(ko.yukari??"—")+" m")+
+    sat("yükseklik",(ko.yukari??"—")+" m"+
+        // ⛔ HAM SAYILAR: hangisinin kaydigini gormek icin
+        ((d.irtifa_tani&&d.irtifa_tani.amsl!=null)
+          ? ("   <span class=sonuk>AMSL "+d.irtifa_tani.amsl+
+             "  köken "+(d.irtifa_tani.koken0??"—")+
+             (d.irtifa_tani.baro!=null
+               ? ("  <b>baro "+d.irtifa_tani.baro+"</b>") : "")+"</span>") : ""))+
     sat("hız",(hz.yatay??"—")+" m/s   ↕ "+(hz.dikey??"—"))+
     sat("yatış / dikilme",(du.roll??"—")+"° / "+(du.pitch??"—")+"°")+
     sat("yönelme",(du.yaw??"—")+"°")+
@@ -1305,7 +1328,8 @@ function gosterim(d){
   if((d.video||{}).hata)
     u.push("⚠ video kaydı hatası: "+d.video.hata);
   if((d.gudum||{}).durum=="KALKIS")
-    u.unshift("🚀 OTONOM KALKIŞ — araç tırmanıyor ("+((d.konum||{}).yukari??0)+" m / "+
+    u.unshift("🚀 OTONOM KALKIŞ — araç tırmanıyor ("+
+              (((d.gudum||{}).yukseklik??(d.konum||{}).yukari)??0)+" m / "+
               "hedef "+(d.kalkis_alt??35)+" m).");
   if(di.aktif===true) u.push("⬇ DİKEY İNİŞ SÜRÜYOR ("+di.asama+
       ") — görev kesildi, araç alçalıyor. Yere değince DISARM et; "+

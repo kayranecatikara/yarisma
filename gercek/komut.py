@@ -302,6 +302,12 @@ class KomutSureci:
            `tik`) panel TEK arm yetkisidir.
         """
         self._arm = bool(ac)
+        # ⛔ DISARM GÖREVİ ANINDA BİTİRİR — bir tik bile beklemeden.
+        #   `tik()` içindeki kapı ikinci güvencedir (kumandanın anahtarıyla
+        #   disarm için); ama panelden disarm eden operatör görevin O AN
+        #   bittiğini görmeli, sonraki tikte değil.
+        if not self._arm:
+            self._gorev = False
         return self._arm
 
     @property
@@ -477,6 +483,18 @@ class KomutSureci:
             self._kmd_arm_onceki = _a
         else:
             self._kmd_arm_onceki = None
+
+        # ⛔⛔ ARM YOKSA GÖREV DE YOK — YAPISAL KURAL (2026-09-02).
+        #   SAHADA YAŞANDI: operatör görevi başlattı, sonra DISARM etti,
+        #   sonra tekrar ARM etti — ve görev mandalı hâlâ açık olduğu için
+        #   araç "GÖREVİ BAŞLAT"a basılmadan kaldığı yerden tırmanmaya
+        #   devam etti. Operatör bunu "otonom düğmesi görevi tetikliyor"
+        #   diye gördü; aslında mandal disarm'ı ATLAMIŞTI.
+        #   Kural: disarm görevi BİTİRİR. Yeniden başlatmak açık bir
+        #   karardır (GÖREVİ BAŞLAT).
+        if not self._arm and self._gorev:
+            self._gorev = False
+            self.sayac["gorev_disarm"] = self.sayac.get("gorev_disarm", 0) + 1
 
         kmd_kopuk = (simdi - self._son_kmd_t) > c.KMD_ASIM_S
         # ⛔⛔ TESLİM SÜRESİ — R39 BUNU EKSİK BULDU (2026-08-29).

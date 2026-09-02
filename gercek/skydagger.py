@@ -324,11 +324,30 @@ class SkydaggerBag:
             except (KeyError, TypeError, ValueError):
                 pass
         v = t.get("vario") or t.get("baro")
-        if v is not None and "vspeed" in v:
-            try:
-                d["vario"] = {"dusey_hiz_ms": float(v["vspeed"])}
-            except (TypeError, ValueError):
-                pass
+        if v is not None:
+            # ⛔ BAROMETRİK İRTİFAYI ATIYORDUK (2026-09-02'de fark edildi).
+            #   Yalnız `vspeed` alınıyordu. Oysa CRSF BARO_ALTITUDE
+            #   çerçevesi irtifayı da taşıyor ve uçuş kartının OSD'sinde
+            #   gördüğümüz "ALT" o. GPS AMSL'i sahada 893 m sıçradı
+            #   (güdümün yüksekliği -893 m okundu); barometre bu
+            #   sıçramaları YAPMAZ. Şimdilik YALNIZ GÖSTERİM için
+            #   yakalanıyor — güdüm hâlâ GPS'i kullanıyor. Değiştirmeden
+            #   önce sahada iki sayıyı YAN YANA görmemiz gerek.
+            _b = {}
+            for ad in ("vspeed", "vertical_speed"):
+                if ad in v:
+                    try:
+                        _b["dusey_hiz_ms"] = float(v[ad]); break
+                    except (TypeError, ValueError):
+                        pass
+            for ad in ("altitude", "alt", "altitude_m"):
+                if ad in v:
+                    try:
+                        _b["irtifa_m"] = float(v[ad]); break
+                    except (TypeError, ValueError):
+                        pass
+            if _b:
+                d["vario"] = _b
         L = t.get("link")
         if L is not None:
             d["link"] = {"yukari_lq": L.get("lq", L.get("uplink_lq", -1)),

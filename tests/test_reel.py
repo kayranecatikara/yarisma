@@ -932,7 +932,8 @@ def test_R35_GUDUM_ARM_EDEMEZ_yapisal():
     # (c) davranışsal: pilot arm=False iken güdüm ne derse desin arm gitmez
     sp, bag, km, k = _duzenek(arm=False, kip_anahtari=True)
     k.kip_sec("OTONOM")
-    k.gorev_ayarla(True)   # GÖREV kipten AYRI (2026-09-02)
+    # ⛔ KASTEN ARM EDİLMİYOR: bu bekçinin sorusu "insan arm etmemişken
+    #   güdüm arm edebilir mi". Görev de başlatılmaz (arm yoksa görev yok).
     k.otonom_yaz(1.0, 1.0, 1.0, 1.0)
     k.tik()
     assert _son_kanallar(sp)["arm"] == C.CRSF_MIN, (
@@ -946,6 +947,7 @@ def test_R35_GUDUM_ARM_EDEMEZ_yapisal():
         "otonomda kumanda karışmamalı")
     # arm YALNIZ insandan gelir: panelde mandal
     k.arm_ayarla(True)
+    k.gorev_ayarla(True)
     k.tik()
     assert _son_kanallar(sp)["arm"] == C.CRSF_MAX, "panelden arm geçmedi"
     # ...ve MANUEL kipte kumandanın anahtarı DEĞİŞİNCE mandalı sürer
@@ -966,7 +968,8 @@ def test_R36_pilot_VETOSU_ANINDA_etki_ediyor():
     sp, bag, km, k = _duzenek(arm=True, kip_anahtari=True,
                               throttle=-0.4, pitch=0.1, roll=0.2, yaw=0.3)
     k.kip_sec("OTONOM")
-    k.gorev_ayarla(True)   # GÖREV kipten AYRI (2026-09-02)
+    k.arm_ayarla(True)      # ARM yoksa GOREV de yok (2026-09-02)
+    k.gorev_ayarla(True)
     k.otonom_yaz(0.5, -0.5, 0.5, -0.5)
     assert k.tik()[1]["kaynak"] == "OTONOM"
     km.c.kip_anahtari = False                       # PİLOT VETO
@@ -987,7 +990,8 @@ def test_R37_gudum_BAYATLAYINCA_cubuklara_dusuyor():
     c = KomutCfg
     sp, bag, km, k = _duzenek(arm=True, kip_anahtari=True, throttle=-0.3)
     k.kip_sec("OTONOM")
-    k.gorev_ayarla(True)   # GÖREV kipten AYRI (2026-09-02)
+    k.arm_ayarla(True)      # ARM yoksa GOREV de yok (2026-09-02)
+    k.gorev_ayarla(True)
     t0 = 1000.0
     k.otonom_yaz(0.7, 0.0, 0.0, 0.0, t=t0)
     assert k.tik(simdi=t0 + 0.05)[1]["kaynak"] == "OTONOM"
@@ -1032,7 +1036,8 @@ def test_R39_kumanda_KOPARSA_otonom_SURUYOR_arm_KORUNUYOR():
     sp, bag, km, k = _duzenek(arm=True, kip_anahtari=True)
     k.arm_ayarla(True)          # ARM artık MANDAL (2026-09-02)
     k.kip_sec("OTONOM")
-    k.gorev_ayarla(True)   # GÖREV kipten AYRI (2026-09-02)
+    k.arm_ayarla(True)      # ARM yoksa GOREV de yok (2026-09-02)
+    k.gorev_ayarla(True)
     t0 = 5000.0
     k.otonom_yaz(0.2, 0.0, 0.0, 0.0, t=t0)
     k.tik(simdi=t0)
@@ -1071,7 +1076,8 @@ def test_R40_DISARM_asla_emniyet_tedbiri_olarak_gonderilmiyor():
         sp, bag, km, k = _duzenek(arm=True, kip_anahtari=not veto)
         k.arm_ayarla(True)      # ARM artık MANDAL (2026-09-02)
         k.kip_sec("OTONOM")
-        k.gorev_ayarla(True)   # GÖREV kipten AYRI (2026-09-02)
+        k.arm_ayarla(True)      # ARM yoksa GOREV de yok (2026-09-02)
+        k.gorev_ayarla(True)
         t0 = 7000.0
         k.otonom_yaz(0.3, 0, 0, 0, t=t0 - (10.0 if bayat else 0.0))
         km.kopuk = bool(kopuk)
@@ -1098,7 +1104,8 @@ def test_R41_veto_KAPALIYKEN_otonom_HIC_baslamaz():
     """
     sp, bag, km, k = _duzenek(arm=True, kip_anahtari=False, throttle=-0.5)
     k.kip_sec("OTONOM")
-    k.gorev_ayarla(True)   # GÖREV kipten AYRI (2026-09-02)
+    k.arm_ayarla(True)      # ARM yoksa GOREV de yok (2026-09-02)
+    k.gorev_ayarla(True)
     for i in range(20):
         k.otonom_yaz(0.9, 0.9, 0.9, 0.9)
         ok, d = k.tik()
@@ -1116,7 +1123,8 @@ def test_R42_gonderilen_cerceve_GECERLI_CRSF():
     """
     sp, bag, km, k = _duzenek(arm=True, kip_anahtari=True)
     k.kip_sec("OTONOM")
-    k.gorev_ayarla(True)   # GÖREV kipten AYRI (2026-09-02)
+    k.arm_ayarla(True)      # ARM yoksa GOREV de yok (2026-09-02)
+    k.gorev_ayarla(True)
     for i in range(30):
         k.otonom_yaz(0.1 * (i % 10) - 0.5, 0.0, 0.0, 0.0)
         k.tik()
@@ -1396,7 +1404,8 @@ def test_R47_UCTAN_UCA_beyin_gercek_baglantiyla_UCUYOR():
             else dik.durdur())
         ks.arm_ayarla(True)         # ARM artık MANDAL (2026-09-02)
         ks.kip_sec("OTONOM")
-        ks.gorev_ayarla(True)   # GÖREV kipten AYRI (2026-09-02)
+        ks.arm_ayarla(True)      # ARM yoksa GOREV de yok (2026-09-02)
+        ks.gorev_ayarla(True)
         fazlar, t, dt = [], 0.0, 0.02
         for i in range(1500):               # 30 s
             sp.hepsini_bas(); gb.pompala()
@@ -1600,7 +1609,8 @@ def test_R53_mod_alani_GERCEGI_soyluyor():
     sp.hepsini_bas(); gb.pompala(); gb.kokeni_kur()
 
     ks.kip_sec("OTONOM")
-    ks.gorev_ayarla(True)   # GÖREV kipten AYRI (2026-09-02)
+    ks.arm_ayarla(True)      # ARM yoksa GOREV de yok (2026-09-02)
+    ks.gorev_ayarla(True)
     km.c.kip_anahtari = False                     # PİLOT VETO
     ks.otonom_yaz(0.1, 0, 0, 0); ks.tik()
     assert drone_yki._telemetri(gb, ks, None)["iha_mod"] is False, (
@@ -2040,7 +2050,8 @@ def test_R67_izin_anahtari_YOKSA_otonomu_BLOKE_ETMIYOR():
     # (b) hakem: None gelince PANELİN izni korunmalı
     sp, bag, km, ks = _duzenek(arm=True, kip_anahtari=None)
     ks.kip_sec("OTONOM")
-    ks.gorev_ayarla(True)   # GÖREV kipten AYRI (2026-09-02)
+    ks.arm_ayarla(True)      # ARM yoksa GOREV de yok (2026-09-02)
+    ks.gorev_ayarla(True)
     t = 4000.0
     ks.panel_yaz(-0.3, 0, 0, 0, arm=True, otonom_izin=True, t=t)
     ks.otonom_yaz(0.2, 0, 0, 0, t=t)
@@ -3264,7 +3275,8 @@ def test_R118_FAILSAFE_INIS_hicbir_paket_gecmez():
     sp, bag, km, ks = _duzenek(throttle=0.4, pitch=0.2, roll=-0.3, yaw=0.1,
                                arm=True, kip_anahtari=True)
     ks.kip_sec("OTONOM")
-    ks.gorev_ayarla(True)   # GÖREV kipten AYRI (2026-09-02)
+    ks.arm_ayarla(True)      # ARM yoksa GOREV de yok (2026-09-02)
+    ks.gorev_ayarla(True)
     ks.panel_yaz(0.5, 0.1, 0.1, 0.1, arm=True, otonom_izin=True)
 
     # --- once NORMAL calistigini goster (kiyas cizgisi) ---
@@ -3356,7 +3368,8 @@ def test_R119_DIKEY_INIS_kanallar_ESIGI_gecer_ve_yalniz_OTONOMDA():
     sp, bag, km, ks = _duzenek(throttle=0.0, pitch=0.0, roll=0.0, yaw=0.0,
                                arm=True, kip_anahtari=True)
     ks.kip_sec("OTONOM")
-    ks.gorev_ayarla(True)   # GÖREV kipten AYRI (2026-09-02)
+    ks.arm_ayarla(True)      # ARM yoksa GOREV de yok (2026-09-02)
+    ks.gorev_ayarla(True)
     ks.panel_yaz(0.0, 0.0, 0.0, 0.0, arm=True, otonom_izin=True)
     ks.otonom_yaz(0.0, 0.0, 0.0, 0.0)
     ok, d = ks.tik()
@@ -3407,7 +3420,8 @@ def test_R119_DIKEY_INIS_kanallar_ESIGI_gecer_ve_yalniz_OTONOMDA():
                        ("pilot vetosu", lambda: ks.panel_yaz(
                            0.0, 0.0, 0.0, 0.0, arm=True, otonom_izin=False))):
         ks.kip_sec("OTONOM")
-        ks.gorev_ayarla(True)   # GÖREV kipten AYRI (2026-09-02)
+        ks.arm_ayarla(True)      # ARM yoksa GOREV de yok (2026-09-02)
+        ks.gorev_ayarla(True)
         ks.panel_yaz(0.0, 0.0, 0.0, 0.0, arm=True, otonom_izin=True)
         ks.aux_yaz(inis.aux())
         ks.otonom_yaz(0.0, 0.0, 0.0, 0.0)
@@ -3514,7 +3528,8 @@ def test_R120_KIP_ARM_ve_GOREV_UCU_AYRI():
     sp, bag, km, ks = _duzenek(throttle=0.0, pitch=0.0, roll=0.0, yaw=0.0,
                                arm=True, kip_anahtari=None)
     ks.kip_sec("OTONOM")
-    ks.gorev_ayarla(True)   # GÖREV kipten AYRI (2026-09-02)
+    ks.arm_ayarla(True)      # ARM yoksa GOREV de yok (2026-09-02)
+    ks.gorev_ayarla(True)
 
     def _tik():
         ks.panel_yaz(0.0, 0.0, 0.0, 0.0, arm=False, otonom_izin=True)
@@ -3537,10 +3552,18 @@ def test_R120_KIP_ARM_ve_GOREV_UCU_AYRI():
     # --- 2: ARM BİR MANDAL — PANELDEN, HER KİPTE ---
     #   Kullanıcı (2026-09-02): "arma basılı tutarken arm olmasın, bir kere
     #   basıp bıraktığımızda arm olsun, bir daha basınca disarm olsun."
+    #   ⛔ ÖNCE DISARM: kumandanın anahtarı OTONOM'da arm EDEMEMELİ.
+    #     Disarm görevi de bitirir (yapısal kural), o yüzden ikisi de
+    #     yeniden kurulacak.
+    ks.arm_ayarla(False)
+    assert ks.gorev is False, "disarm görevi bitirmedi"
+    km.c.arm = True                       # kumandanın anahtarı AÇIK
+    d = _tik()
     assert d["arm"] is False, (
         "kumandanın arm anahtarı OTONOM kipinde aracı arm etti — otonomda "
         "kumanda hiçbir şeyi değiştirmemeli")
     ks.arm_ayarla(True)
+    ks.gorev_ayarla(True)      # arm yoksa görev yok; sırası bu
     assert _tik()["arm"] is True, "panelden ARM geçmedi"
     # ⛔ MANDAL: panel çubuk akışı arm GÖNDERMESE BİLE arm KALIR.
     #   (Eski hâlde panelin düğmesi bırakılınca disarm oluyordu.)
@@ -3567,7 +3590,8 @@ def test_R120_KIP_ARM_ve_GOREV_UCU_AYRI():
     assert _tik()["arm"] is False, (
         "MANUEL kipte kumandanın arm anahtarı disarm etmedi")
     ks.kip_sec("OTONOM")
-    ks.gorev_ayarla(True)   # GÖREV kipten AYRI (2026-09-02)
+    ks.arm_ayarla(True)      # ARM yoksa GOREV de yok (2026-09-02)
+    ks.gorev_ayarla(True)
     ks.arm_ayarla(True)
     assert _tik()["kaynak"] == "OTONOM", "panelden OTONOM geri gelmedi"
 
@@ -3575,7 +3599,8 @@ def test_R120_KIP_ARM_ve_GOREV_UCU_AYRI():
     sp2, bag2, km2, ks2 = _duzenek(throttle=0.0, pitch=0.0, roll=0.0, yaw=0.0,
                                    arm=True, kip_anahtari=True)
     ks2.kip_sec("OTONOM")
-    ks2.gorev_ayarla(True)   # GÖREV kipten AYRI (2026-09-02)
+    ks2.arm_ayarla(True)      # ARM yoksa GOREV de yok (2026-09-02)
+    ks2.gorev_ayarla(True)
 
     def _tik2():
         ks2.panel_yaz(0.0, 0.0, 0.0, 0.0, arm=False, otonom_izin=True)
@@ -3612,6 +3637,7 @@ def test_R120_KIP_ARM_ve_GOREV_UCU_AYRI():
         "OTONOM'a geçmek GÖREVİ DE BAŞLATTI — ikisi ayrı olmalı "
         "(kaynak=%s sebep=%s)" % (d["kaynak"], d["sebep"]))
     assert d["gorev"] is False
+    ks3.arm_ayarla(True)      # ARM yoksa GOREV de yok (2026-09-02)
     ks3.gorev_ayarla(True)
     assert _tik3()["kaynak"] == "OTONOM", "görev başlatıldı ama güdüm sürmedi"
     # ⛔ SERT AYRIM: MANUEL'e geçmek görevi DURDURUR ve OTONOM'a dönmek
