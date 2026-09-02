@@ -137,6 +137,8 @@ class SkydaggerBag:
         self._tcp = None
         self._telem = {}
         self._telem_t = {}
+        #: hangi telemetri çerçevelerini GÖRDÜK (şema teşhisi)
+        self._gorulen = set()
         self._kilit = threading.Lock()
         self._is = None
         self._calisiyor = False
@@ -284,6 +286,19 @@ class SkydaggerBag:
         simdi = time.monotonic()
         with self._kilit:
             if m.get("kind") == "telem" and ad:
+                # ⛔ ŞEMA TEŞHİSİ — HER ÇERÇEVE TÜRÜ İÇİN BİR KEZ BASILIR.
+                #   NİYE: backend'in hangi alanları gönderdiğini TAHMİN
+                #   ederek çalışıyorduk. Barometrik irtifa var mı yok mu
+                #   sorusu 2026-09-02'de saatlerce cevapsız kaldı çünkü
+                #   gelen veriyi hiçbir yerde LİSTELEMİYORDUK. Tek satır,
+                #   bir kez, ve hangi alanların ELİMİZDE olduğunu söyler.
+                if ad not in self._gorulen:
+                    self._gorulen.add(ad)
+                    _d = m.get("data")
+                    _alan = (sorted(_d.keys()) if isinstance(_d, dict)
+                             else sorted(k for k in m if k not in
+                                         ("kind", "name")))
+                    print("  TELEMETRİ ÇERÇEVESİ '%s' : %s" % (ad, _alan))
                 self._telem[ad] = m
                 self._telem_t[ad] = simdi
             elif m.get("kind") == "telemetry":
