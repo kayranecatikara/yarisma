@@ -8,7 +8,29 @@ YOK.
 
 ---
 
-## 0 · TEMİZLİK
+## 0 · KABLOLARI TAK
+
+| kablo / parça | nereye |
+|---|---|
+| **ethernet** | dizüstü ← yarışma prizi |
+| **ESP32 (ELRS modülü)** | dizüstü USB → `/dev/ttyUSB0` |
+| **FPV yakalama kartı** | dizüstü USB |
+| **kumanda** | dizüstü USB · EdgeTX: `SYS → Hardware → USB Mode = Joystick` |
+| **2S pil (ESP32 için)** | ⛔ backend'de `RC_ENABLE` yazdıktan SONRA tak |
+| **drone pili · pervaneler** | araca |
+
+Sonra **tek komutla hepsini yokla**:
+
+```bash
+~/projects/yarisma/araclar/on_kontrol.sh
+```
+
+`HER ŞEY HAZIR` yazmalı. `✗` varsa o satırdaki çareyi uygula.
+(Bu betik hiçbir şey başlatmaz, sunucuya hiçbir şey göndermez.)
+
+---
+
+## 0b · TEMİZLİK
 
 ```bash
 for p in $(pgrep -f drone_yki; pgrep -f sahte_sky; pgrep -f sahte_sun); do kill -9 $p; done
@@ -207,6 +229,7 @@ print('kalan',(d.get('kontrol') or {}).get('kalan'))"
 ## HIZLI ÖZET
 
 ```bash
+~/projects/yarisma/araclar/on_kontrol.sh                       # 0  ön kontrol
 sudo ~/projects/yarisma/araclar/ag_kur.sh                      # 1  ağ
 python3 ~/projects/yarisma/araclar/sunucu_testi.py --sure 20   # 2  sunucu
 ~/projects/yarisma/skydagger/baslat_backend.sh                 # 3  backend
