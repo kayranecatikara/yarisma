@@ -209,10 +209,10 @@ araç dönemediği ve hız hatası hep azami olduğu için `pitch` daima
 ## 8 · DURDURMA ve KAPANIŞ
 
 **Uçuş sırasında:** panelde **`DISARM`** (anında, onaysız).
-Acil: **`FAILSAFE — DİKEY İNİŞ`**, son çare **`PAKET KES`**.
+Acil: **`⛔ FAILSAFE — DİKEY İNİŞ`**, son çare **`son çare: RC paketini kes`**.
 
 ⛔ **OTONOM'da kumanda güdüme karışmaz.** Durdurmak için panel:
-`MANUEL` / `DİKEY İNİŞ` / `PAKET KES`.
+`MANUEL` / `FAILSAFE — DİKEY İNİŞ` / `son çare: RC paketini kes`.
 
 **Kapanış sırası (backend konsolunda):**
 
