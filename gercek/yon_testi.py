@@ -26,9 +26,20 @@ YÖN İŞARETİ TESTİ — güdüm hatayı KAPATIYOR mu, BÜYÜTÜYOR mu (YERDE,
    Yanlış hipotezde, aracı Δ kadar çevirdiğinde görünen yön 2Δ kadar
    kayar — dört yönde bakınca ayrım çok belirgin olur.
 
+⛔⛔ HEDEF YAKIN OLMALI — ~15 m VEYA DAHA AZ (ölçüldü 2026-09-02)
+   Uzak hedefte hız hatası azami olur ve çubuklar ±1.00'de DOYAR:
+       hedef 250 m -> P+1.000  ·  40 m -> P+1.000   (DOYUMDA, açı KAYIP)
+       hedef  15 m -> P+0.871  ·   8 m -> P+0.965   (kullanılabilir)
+   Doyumda H0 ve H1'in İKİSİ de R=1.000 çıkar ve test AYIRT EDEMEZ.
+   ⭐ EN KOLAY YOL: sahte sunucuyu `--desen elle` ile çalıştır ve hedefi
+     haritadan aracın ~15 m yanına sürükle. Yarışma sunucusu gerekmez.
+
 ⛔ KOŞULLARI
-   · PERVANELER ÇIKARILI · araç DISARM · panelde OTONOM
-   · hedef akışı taze (Talon açık)
+   · PERVANELER ÇIKARILI · araç DISARM · ARM ETME
+   · panelde KÖKEN KUR basılı, hedef akışı taze
+   · ⭐ OTONOM'a BASMAYA GEREK YOK: güdüm (`Beyin.adim`) kipten ve
+     arm'dan bağımsız çalışır; çıktısı `oto_cubuk`ta okunur. Sınadığımız
+     şey GÜDÜMÜN ÜRETTİĞİ yön, hakemin onu iletip iletmemesi değil.
    · en az ÜÇ farklı burun yönü (dördü daha iyi)
 
 İKİ KİP:
@@ -108,7 +119,13 @@ def main():
     print("=" * 70)
     print("  YÖN İŞARETİ TESTİ — pervanesiz, DISARM, panelde OTONOM")
     print("=" * 70)
-    print("  ⛔ PERVANELER ÇIKARILI olduğunu doğrula.")
+    print("  ⛔ PERVANELER ÇIKARILI · araç DISARM · ARM ETME")
+    print("  ⛔ OTONOM'A BASMAYA GEREK YOK — güdüm kipten bağımsız çalışır.")
+    print("  ⭐ GEREKEN: panelde KÖKEN KUR + hedef akışı taze.")
+    print("  ⛔ HEDEF ~15 m VEYA DAHA YAKIN olmalı — uzakta çubuklar doyar")
+    print("     ve test ayırt edemez (ölçüldü: 40 m'de bile doyumda).")
+    print("  ⛔ KALKIŞ FAZI KAPALI OLMALI:  DOW_KALKIS_ALT=0 ile başlat;")
+    print("     yoksa güdüm yerdeyken KALKIS'ta kalır ve yatay komut ÜRETMEZ.")
     if a.mod == "cevir":
         print("  Aracı elinde tut ve YAVAŞÇA çevir: her yönde ~10 s bekle,")
         print("  en az DÖRT yön göster (kuzey, doğu, güney, batı gibi).")
@@ -130,17 +147,30 @@ def main():
         except Exception as e:
             print("  ⛔ panele ulaşılamıyor (%s) — drone_yki çalışıyor mu?" % e)
             return 2
-        k = d.get("komut") or {}
-        if k.get("kaynak") == "OTONOM":
+        # ⛔⛔ HAKEME DEĞİL, GÜDÜMÜN KENDİ ÇIKTISINA BAKILIR.
+        #   ESKİDEN `kaynak == "OTONOM"` bekleniyordu. 2026-09-02'de görev
+        #   kipten ayrıldı: otonom artık ARM + GÖREVİ BAŞLAT istiyor. Oysa
+        #   BU TESTİN ŞARTI "araç DISARM" — yani test kendi güvenlik
+        #   şartıyla çelişip SONSUZA KADAR bekleyecekti.
+        #   Güdüm (`Beyin.adim`) kipten ve arm'dan BAĞIMSIZ çalışır ve
+        #   çıktısını `oto_cubuk`a yazar. Sınamak istediğimiz de zaten
+        #   GÜDÜMÜN ÜRETTİĞİ yön; hakemin onu araca iletip iletmemesi
+        #   ayrı bir konu. `cubuk_izle.py` da aynı yolu kullanıyor.
+        oc = d.get("oto_cubuk") or {}
+        if oc.get("yas") is not None and oc["yas"] < 0.5:
             break
         if time.time() - t0 > 180:
-            print("  ⛔ 3 dakikadır OTONOM'a geçilmedi. Panelde OTONOM'a bas.")
+            print("  ⛔ 3 dakikadır güdüm komut üretmiyor.")
+            print("     · köken kuruldu mu (panelde KÖKEN KUR)")
+            print("     · hedef akışı taze mi")
+            print("     · telemetri geliyor mu")
             return 2
-        print("\r  OTONOM bekleniyor…  kaynak=%-8s sebep=%-14s" %
-              (k.get("kaynak"), k.get("sebep")), end="")
+        g = d.get("gudum") or {}
+        print("\r  güdüm bekleniyor…  durum=%-10s tik=%-12s" %
+              (g.get("durum"), g.get("tik")), end="")
         sys.stdout.flush()
         time.sleep(0.5)
-    print("\r  ✔ OTONOM etkin — toplama başlıyor (%g s)\n" % a.sure)
+    print("\r  ✔ güdüm komut üretiyor — toplama başlıyor (%g s)\n" % a.sure)
 
     ornek = []          # (yaw, pitch, roll, hedef_kerterizi)
     doyum = 0
@@ -153,18 +183,18 @@ def main():
         except Exception:
             time.sleep(0.3)
             continue
-        k = d.get("komut") or {}
-        if k.get("kaynak") != "OTONOM":
-            print("  ⚠ OTONOM düştü (sebep: %s) — panelde tekrar OTONOM'a bas"
-                  % k.get("sebep"))
+        oc = d.get("oto_cubuk") or {}
+        du = d.get("durus") or {}
+        if oc.get("yas") is None or oc["yas"] > 0.5:
+            g = d.get("gudum") or {}
+            print("  ⚠ güdüm komut üretmiyor (durum=%s tik=%s)"
+                  % (g.get("durum"), g.get("tik")))
             time.sleep(1.0)
             continue
-        cub = k.get("komut") or []
-        du = d.get("durus") or {}
-        if len(cub) < 4 or du.get("yaw") is None:
+        if du.get("yaw") is None:
             time.sleep(0.3)
             continue
-        _, pitch, roll, _ = cub[0], cub[1], cub[2], cub[3]
+        pitch, roll = float(oc.get("pitch", 0.0)), float(oc.get("roll", 0.0))
         yaw = float(du["yaw"])
         buyukluk = math.hypot(pitch, roll)
         if abs(pitch) >= 0.999 or abs(roll) >= 0.999:
@@ -241,7 +271,15 @@ def main():
     print("     H1  işaret TERS   : R = %.3f" % R1)
     print()
     if doyum:
-        print("  ⚠ %d örnekte çubuk DOYUMDA (±1.00) — açı bilgisi kırpılmış" % doyum)
+        oran = 100.0 * doyum / max(1, len(ornek))
+        print("  ⚠ %d örnekte (%%%.0f) çubuk DOYUMDA (±1.00) — açı bilgisi kırpık"
+              % (doyum, oran))
+        if oran > 50.0:
+            print()
+            print("  ⛔⛔ ÖRNEKLERİN ÇOĞU DOYUMDA — BU SONUÇ GÜVENİLMEZ.")
+            print("     Doyumda H0 ve H1 aynı görünür; test ayırt edemez.")
+            print("     ÇARE: HEDEFİ YAKINLAŞTIR (~15 m veya daha az).")
+            print("     Sahte sunucu `--desen elle` ile haritadan sürükle.")
     if kucuk:
         print("  ℹ %d örnek çok küçük çubuk olduğu için atlandı" % kucuk)
 
@@ -300,18 +338,20 @@ def _canli(a):
                 print("  ⛔ panele ulaşılamıyor: %s" % e)
                 time.sleep(1.0)
                 continue
-            k = d.get("komut") or {}
-            cub = k.get("komut") or []
+            oc = d.get("oto_cubuk") or {}
+            cub = [oc.get("throttle"), oc.get("pitch"),
+                   oc.get("roll"), oc.get("yaw")]
             du = d.get("durus") or {}
             hk = d.get("hedef_ham_konum")
             ko = d.get("konum") or {}
-            if k.get("kaynak") != "OTONOM":
-                print("\r  ⛔ kaynak=%-7s sebep=%-14s -> panelde OTONOM'a bas "
-                      % (k.get("kaynak"), k.get("sebep")), end="")
+            if oc.get("yas") is None or oc["yas"] > 0.5:
+                g = d.get("gudum") or {}
+                print("\r  ⛔ güdüm komut üretmiyor  durum=%-10s tik=%-12s "
+                      % (g.get("durum"), g.get("tik")), end="")
                 sys.stdout.flush()
                 time.sleep(0.5)
                 continue
-            if not hk or len(cub) < 4 or du.get("yaw") is None:
+            if not hk or cub[1] is None or du.get("yaw") is None:
                 print("\r  ⛔ hedef konumu yok — köken kuruldu mu, hedef taze mi ",
                       end="")
                 sys.stdout.flush()
