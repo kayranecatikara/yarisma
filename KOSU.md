@@ -232,6 +232,12 @@ hangi şartın düştüğünü söyler:
 | `teslim_suresi` | 3 s'dir insan girdisi yok | panel sekmesini öne al |
 | `paket_kesildi` | ne panel ne kumanda | panel sekmesini yenile |
 | `gorev_baslamadi` | OTONOM seçili ama görev başlatılmamış | gaz dibe → `ARM` → `GÖREVİ BAŞLAT` |
+
+**İrtifa saçma görünüyorsa** (ör. `-892 m` yazarken uçuş kartı 1 m diyor):
+`KÖKEN KUR`'a **tekrar bas**. Köken hem konum hem irtifa referansını
+yeniler, ve artık güdümün zemin referansını da sıfırlıyor. `yükseklik`
+satırındaki ham sayılar (`AMSL … köken … baro …`) hangisinin kaydığını
+gösterir. Görev başlatıldığında zemin referansı zaten otomatik yenilenir.
 | `-` ve kip `MANUEL` | OTONOM'a hiç geçilmemiş | `OTONOM`'a bas |
 
 **Tek satırlık tam teşhis:**

@@ -1337,7 +1337,13 @@ function gosterim(d){
   let u=[];
   if((d.video||{}).hata)
     u.push("⚠ video kaydı hatası: "+d.video.hata);
-  if((d.gudum||{}).durum=="KALKIS")
+  // ⛔⛔ GÖREV BAŞLAMADAN "TIRMANIYOR" DEMEZ (2026-09-02, sahada yanılttı).
+  //   `gudum.durum` KALICI bir alandır ve BAŞLANGIÇ DEĞERİ "KALKIS"tir —
+  //   yani güdüm hiç çalışmasa bile "KALKIS" yazar. Eski koşul yalnız ona
+  //   bakıyordu; operatör GÖREVİ BAŞLAT'ın onay kutusu AÇIKKEN bu satırı
+  //   görüp "onay vermeden görev başladı" sandı. Artık hakemin gerçekten
+  //   otonom komut sürdüğünü de şart koşuyoruz.
+  if((d.gudum||{}).durum=="KALKIS" && k.gorev===true && k.kaynak=="OTONOM")
     u.unshift("🚀 OTONOM KALKIŞ — araç tırmanıyor ("+
               (((d.gudum||{}).yukseklik??(d.konum||{}).yukari)??0)+" m / "+
               "hedef "+(d.kalkis_alt??35)+" m).");
@@ -1419,6 +1425,22 @@ class _Islem(BaseHTTPRequestHandler):
                          otonom_izin=bool(g.get("izin", False)))
             return self._yaz(200, "application/json", b'{"ok":1}')
         if self.path == "/api/gorev" and ks is not None:
+            # ⛔⛔ GÖREV BAŞLARKEN ZEMİN REFERANSI YENİLENİR (2026-09-02).
+            #   SAHADA YAŞANDI: panel "-892 m" gösteriyordu, uçuş kartının
+            #   kendi OSD'si 1 m diyordu. Sebep: `Beyin._zemin_z` GÜDÜMÜN
+            #   İLK TİKİNDE yakalanıyor ve bir daha güncellenmiyor; köken
+            #   o an bozuk bir GPS irtifasıyla kurulduysa ya da GPS irtifası
+            #   sonradan kaydıysa `yukseklik` yüzlerce metre yanlış okunuyor.
+            #   ⛔ BU BİR UÇUŞ TEHLİKESİ: `yukseklik` KALKIS'ın çıkış şartı
+            #     (`>= KALKIS_ALT_M - TOL`). Negatif okunursa KALKIS ASLA
+            #     bitmez ve araç pervaneliyken durmadan tırmanır.
+            #   GÖREVİN BAŞLADIĞI AN araç YERDEDİR (arm şart, kalkış henüz
+            #   yok) — zemin referansı için doğru an tam olarak budur.
+            if bool(g.get("ac", False)) and _D.get("beyin") is not None:
+                try:
+                    _D["beyin"].zemini_sifirla()
+                except Exception:
+                    pass
             # ⛔ GÖREV KİPTEN AYRI: OTONOM seçmek görevi BAŞLATMAZ.
             #   Teknik sebep de var — uçuş kartı gaz aşağıda değilken
             #   ARM etmez; güdüm hemen tırmanış gazı verirse arm imkânsız.
@@ -1523,6 +1545,16 @@ class _Islem(BaseHTTPRequestHandler):
                 {"ok": bool(ok), "sebep": r.sebep}).encode())
         if self.path == "/api/koken" and _D["baglanti"] is not None:
             ok, mesaj = _D["baglanti"].kokeni_kur(bool(g.get("zorla")))
+            # ⛔ KÖKEN YENİLENDİYSE ZEMİN REFERANSI DA YENİLENİR.
+            #   Operatör KÖKEN KUR'a genellikle İLK KÖKEN BOZUK OLDUĞU İÇİN
+            #   tekrar basar. `Beyin._zemin_z` eski kökene göre yakalanmış
+            #   olduğu için güncellenmezse `yukseklik` yanlış kalmaya devam
+            #   ederdi — sahada -892 m böyle okundu.
+            if ok and _D.get("beyin") is not None:
+                try:
+                    _D["beyin"].zemini_sifirla()
+                except Exception:
+                    pass
             return self._yaz(200, "application/json",
                              json.dumps({"ok": ok, "mesaj": mesaj}).encode())
         self._yaz(404, "application/json", b'{"ok":0}')

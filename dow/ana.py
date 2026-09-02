@@ -109,6 +109,22 @@ class Beyin:
         self.tani = {}
 
     # ---------------- yardımcı ----------------
+    def zemini_sifirla(self):
+        """Zemin referansını (yükseklik sıfırı) YENİDEN aldır.
+
+        ⛔ NİYE: `_zemin_z` güdümün İLK tikinde yakalanır ve bir daha
+        güncellenmez. Köken bozuk bir GPS irtifasıyla kurulduysa ya da
+        GPS irtifası sonradan kaydıysa `yukseklik` yüzlerce metre yanlış
+        okunur — sahada -892 m görüldü, uçuş kartının OSD'si 1 m derken.
+        Bu bir UÇUŞ TEHLİKESİDİR: `yukseklik` KALKIS'ın çıkış şartıdır,
+        negatif okunursa KALKIS asla bitmez ve araç durmadan tırmanır.
+
+        ⚠ YALNIZ ARAÇ YERDEYKEN ÇAĞRILMALI. Doğru an: görevin başlatıldığı
+        an (arm şart, kalkış henüz yok). Uçarken çağrılırsa o anki irtifa
+        "sıfır" sayılır ve araç bir 35 m daha tırmanır.
+        """
+        self._zemin_z = None
+
     def spawn_sifirla(self):
         """Drone yeniden doğduğunda: faz başa, zemin YENİDEN alınır.
         (Yeni spawn = gerçekten yerdeyiz; zemin referansı burada meşru.)"""
